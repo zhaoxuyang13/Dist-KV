@@ -4,13 +4,19 @@ option go_package = "ds/go/slave";
 
 package slave;
 
-message String {
-  string value = 1;
+message Request {
+  int32  VnodeNum = 1;
+  string Key = 2;
+  string Value = 3;
+}
+
+message Response {
+  string Value = 1;
 }
 
 
 service KVService {         //TODO: Put, Del should have void as return message ?
-  rpc Put (String) returns (String);
-  rpc Get (String) returns (String);
-  rpc Del (String) returns (String);
+  rpc Put (Request) returns (Response);
+  rpc Get (Request) returns (Response);
+  rpc Del (Request) returns (Response);
 }

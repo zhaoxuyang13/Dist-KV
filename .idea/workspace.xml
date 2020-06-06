@@ -11,19 +11,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/ds/go/main/slave.pb.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ds/go/slave/slave.pb.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go/client.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go/slave/slave.pb.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go/slave/slave.proto" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go/slave_test.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.sum" beforeDir="false" afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/utils/zk_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/utils/zk_client.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave.pb.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.pb.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave.proto" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave_test.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -57,12 +49,15 @@
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="configurable.Global.GOPATH.is.expanded" value="true" />
+    <property name="configurable.Module.GOPATH.is.expanded" value="false" />
+    <property name="configurable.Project.GOPATH.is.expanded" value="true" />
     <property name="go.import.settings.migrated" value="true" />
     <property name="go.sdk.automatically.set" value="true" />
     <property name="go.tried.to.enable.integration.vgo.integrator" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$/go" />
     <property name="nodejs_package_manager_path" value="npm" />
-    <property name="settings.editor.selected.configurable" value="terminal" />
+    <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
   </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
@@ -119,10 +114,10 @@
       <screen x="0" y="0" width="1440" height="900" />
     </state>
     <state x="433" y="259" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1440.900@0.0.1440.900" timestamp="1591402821181" />
-    <state x="441" y="228" key="EnvironmentVariablesDialog" timestamp="1591405199690">
+    <state x="441" y="228" key="EnvironmentVariablesDialog" timestamp="1591409184670">
       <screen x="0" y="0" width="1440" height="900" />
     </state>
-    <state x="441" y="228" key="EnvironmentVariablesDialog/0.0.1440.900@0.0.1440.900" timestamp="1591405199690" />
+    <state x="441" y="228" key="EnvironmentVariablesDialog/0.0.1440.900@0.0.1440.900" timestamp="1591409184670" />
     <state width="1878" height="305" key="GridCell.Tab.0.bottom" timestamp="1591399336292">
       <screen x="0" y="0" width="1920" height="1080" />
     </state>
@@ -143,9 +138,13 @@
     </state>
     <state width="1878" height="305" key="GridCell.Tab.0.right/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591399336291" />
     <state width="1358" height="271" key="GridCell.Tab.0.right/293.1103.1440.877/47.23.1873.1057@47.23.1873.1057" timestamp="1591377076438" />
-    <state x="221" y="89" key="SettingsEditor" timestamp="1591406740600">
+    <state x="139" y="88" key="SettingsEditor" timestamp="1591409260126">
       <screen x="0" y="0" width="1440" height="900" />
     </state>
-    <state x="221" y="89" key="SettingsEditor/0.0.1440.900@0.0.1440.900" timestamp="1591406740600" />
+    <state x="139" y="88" key="SettingsEditor/0.0.1440.900@0.0.1440.900" timestamp="1591409260126" />
+    <state x="385" y="196" width="670" height="676" key="search.everywhere.popup" timestamp="1591415600888">
+      <screen x="0" y="0" width="1440" height="900" />
+    </state>
+    <state x="385" y="196" width="670" height="676" key="search.everywhere.popup/0.0.1440.900@0.0.1440.900" timestamp="1591415600888" />
   </component>
 </project>

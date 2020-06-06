@@ -1,25 +1,43 @@
 package main
 
-//
-//func TestConf_serversString(t *testing.T) {
-//	type fields struct {
-//		Servers []ZkServer
-//	}
-//	tests := []struct {
-//		name   string
-//		fields fields
-//		want   []string
-//	}{
-//		// TODO: Add test cases.
-//	}
-//	for _, tt := range tests {
-//		t.Run(tt.name, func(t *testing.T) {
-//			c := &Conf{
-//				Servers: tt.fields.Servers,
-//			}
-//			if got := c.serversString(); !reflect.DeepEqual(got, tt.want) {
-//				t.Errorf("serversString() = %v, want %v", got, tt.want)
-//			}
-//		})
-//	}
-//}
+import (
+	"context"
+	. "ds/go/slave"
+	"testing"
+)
+
+func TestSlave_KV(t *testing.T) {
+	slave := Slave{}
+	var ctx context.Context
+	args := Request{
+		VnodeNum : 0,
+		Key : "test Key",
+		Value : "test Value",
+	}
+
+	res, err := slave.Put(ctx, &args)
+	if err != nil {
+		t.Errorf("Put operation failed \n" + err.Error())
+	}
+	print("put K-V: " + args.GetKey() + "-" + res.GetValue())
+
+	res, err = slave.Get(ctx, &args)
+	if err != nil {
+		t.Errorf("Get operation failed \n" + err.Error())
+	}
+	print("get Value " + res.GetValue() + "for key " + args.GetKey())
+
+	res, err = slave.Del(ctx, &args)
+	if err != nil {
+		t.Errorf("delete operation failed \n" + err.Error())
+	}
+
+	res, err = slave.Get(ctx, &args)
+	if err == nil && res != nil{
+		t.Errorf("delete operation failed")
+	}
+	print("key deleted \n" + err.Error())
+
+	/* immulate RPC call by directly calling */
+
+}
