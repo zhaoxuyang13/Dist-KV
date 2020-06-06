@@ -5,8 +5,9 @@
 - [x] Add Yml for configuration of ZK, https://github.com/go-yaml/yaml (though it may be redudant with zk-cluster.yml)
 - [x] change yml to json, for consistency
 - [x] Slave - service Registering.
-- [ ] Slave - Put,Del,Get RPC APIs
-- [ ] Slave - RPC registering
+- [x] Slave - Put,Del,Get RPC APIs
+- [X] Slave - RPC registering
+- [ ] Client - A REPL interface
 - [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call
 - [ ] Lock library (for slaves data access)
 - [ ] Slave

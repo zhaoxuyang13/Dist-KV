@@ -26,7 +26,7 @@ type Slave struct{}
 type LocalStorage struct{
 	storage map[string]string
 }
-var localStorages map[int32]*LocalStorage = make(map[int32]*LocalStorage) // map from vnodeNum to LocalStorage
+var localStorages = make(map[int32]*LocalStorage) // map from vnodeNum to LocalStorage
 
 /* TODO add check for Vnode number's validation, slave should maintain valid vnode list. and respond error if not */
 func (s *Slave) Put(ctx context.Context, args *Request) (*Response, error) {
