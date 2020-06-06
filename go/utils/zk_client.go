@@ -124,8 +124,7 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 		}
 		return nil, err
 	}
-	// var nodes []*ServiceNode
-	nodes := []*ServiceNode{}
+	var nodes []*ServiceNode
 	for _, child := range childs {
 		fullPath := path + "/" + child
 		data, _, err := s.conn.Get(fullPath)
@@ -145,31 +144,23 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 	return nodes, nil
 }
 
-// func main() {
-// 	// 服务器地址列表
-// 	servers := []string{"0.0.0.0:2181", "0.0.0.0:2182", "0.0.0.0:2183"}
-// 	client, err := NewClient(servers, "/api", 10)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	defer client.Close()
-// 	node1 := &ServiceNode{"user", "127.0.0.1", 4000}
-// 	node2 := &ServiceNode{"user", "127.0.0.1", 4001}
-// 	node3 := &ServiceNode{"user", "127.0.0.1", 4002}
-// 	if err := client.Register(node1); err != nil {
-// 		panic(err)
-// 	}
-// 	if err := client.Register(node2); err != nil {
-// 		panic(err)
-// 	}
-// 	if err := client.Register(node3); err != nil {
-// 		panic(err)
-// 	}
-// 	nodes, err := client.GetNodes("user")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	for _, node := range nodes {
-// 		fmt.Println(node.Host, node.Port)
-// 	}
-// }
+/* ZkServer information  */
+type ZkServer struct{
+	Ip   string `json:"ip"`
+	Port string `json:"port"`
+}
+func (s *ZkServer) ToString() string{
+	return s.Ip + ":" + s.Port
+}
+
+/* configuration.json data structure*/
+type Conf struct {
+	Servers []ZkServer `json:"zookeepers"`
+}
+func (c* Conf) ServersString() []string{
+	strings := make([]string, 0)
+	for _, server := range c.Servers {
+		strings = append(strings, server.ToString())
+	}
+	return strings
+}

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "ds/go/slave";
+
+package slave;
+
+message String {
+  string value = 1;
+}
+
+
+service KVService {         //TODO: Put, Del should have void as return message ?
+  rpc Put (String) returns (String);
+  rpc Get (String) returns (String);
+  rpc Del (String) returns (String);
+}
