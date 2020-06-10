@@ -9,7 +9,8 @@
 - [X] Slave - RPC registering
 - [x] Client - A REPL interface
 - [x] Master - Join/Leave/Query interface
-- [ ] Master - atuomatic primary selection
+- [x] Client - Automatic primary/back selection in starting.
+- [ ] Client - Automatic primary/backup selection when failing
 - [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Lock library (for slaves data access)
 - [ ] Slave

@@ -2,22 +2,24 @@ package zk_client
 
 import (
 	"encoding/json"
-	"github.com/samuel/go-zookeeper/zk"
 	"time"
+
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 /* Service Node Information, will be marshalled and stored in zk-cluster as Value.*/
 type ServiceNode struct {
-	Name string `json:"name"` // 服务名称，这里是user
-	Host string `json:"host"`
-	Port int    `json:"port"`
+	Name     string `json:"name"` // 服务名称，这里是user
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Hostname string `json:"hostname"` // hostname of this service
 }
 
 // 在定义一个服务发现的客户端结构体SdClient。
 /* client information,
-	a client connect to a list of servers.
-	at a root node
-	with a connnection.
+a client connect to a list of servers.
+at a root node
+with a connnection.
 */
 type SdClient struct {
 	zkServers []string // 多个节点地址
@@ -25,14 +27,13 @@ type SdClient struct {
 	conn      *zk.Conn // zk的客户端连接
 }
 
-
 // 编写构造器，创建根节点
 /* client constructor */
 func NewClient(zkServers []string, zkRoot string, timeout int) (*SdClient, error) {
 	// client := new(SdClient)
 	// client.zkServers = zkServers
 	// client.zkRoot = zkRoot
-	
+
 	// 连接服务器
 	conn, _, err := zk.Connect(zkServers, time.Duration(timeout)*time.Second)
 	if err != nil {
@@ -40,8 +41,8 @@ func NewClient(zkServers []string, zkRoot string, timeout int) (*SdClient, error
 	}
 	client := SdClient{
 		zkServers: zkServers,
-		zkRoot: zkRoot,
-		conn: conn,
+		zkRoot:    zkRoot,
+		conn:      conn,
 	}
 	// 创建服务根节点
 	if err := client.ensureRoot(); err != nil {
@@ -53,11 +54,11 @@ func NewClient(zkServers []string, zkRoot string, timeout int) (*SdClient, error
 
 /* client methods */
 
-
 /* close client connection */ // 关闭连接，释放临时节点
 func (s *SdClient) Close() {
 	s.conn.Close()
 }
+
 /* create root if not exist */
 func (s *SdClient) ensureRoot() error {
 	exists, _, err := s.conn.Exists(s.zkRoot)
@@ -76,7 +77,7 @@ func (s *SdClient) ensureRoot() error {
 // 值得注意的是代码中的Create调用可能会返回节点已存在错误，这是正常现象，因为会存在多进程同时创建节点的可能。如果创建根节点出错，还需要及时关闭连接。我们不关心节点的权限控制，所以使用zk.WorldACL(zk.PermAll)表示该节点没有权限限制。Create参数中的flag=0表示这是一个持久化的普通节点。
 
 // 接下来我们编写服务注册方法
-/* client register a service, protected temperal sequential add */
+/* client register a service, protected temporal sequential add */
 func (s *SdClient) Register(node *ServiceNode) error {
 	if err := s.ensureName(node.Name); err != nil {
 		return err
@@ -90,8 +91,26 @@ func (s *SdClient) Register(node *ServiceNode) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
+
+func (s *SdClient) TryPrimary(node *ServiceNode)error {
+	if err := s.ensureName(node.Name); err != nil {
+		return err
+	}
+	path := s.zkRoot + "/" + node.Name + "/n"
+	data, err := json.Marshal(node)
+	if err != nil {
+		return err
+	}
+	_, err = s.conn.Create(path, data,zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 /* create name entry if not exist */
 func (s *SdClient) ensureName(name string) error {
 	path := s.zkRoot + "/" + name
@@ -113,7 +132,7 @@ func (s *SdClient) ensureName(name string) error {
 // 接下来我们实现消费者获取服务列表方法
 /* get service node list
 
-*/
+ */
 func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 	path := s.zkRoot + "/" + name
 	// 获取字节点名称
@@ -125,6 +144,7 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 		return nil, err
 	}
 	var nodes []*ServiceNode
+
 	for _, child := range childs {
 		fullPath := path + "/" + child
 		data, _, err := s.conn.Get(fullPath)
@@ -145,11 +165,12 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 }
 
 /* ZkServer information  */
-type ZkServer struct{
+type ZkServer struct {
 	Ip   string `json:"ip"`
 	Port string `json:"port"`
 }
-func (s *ZkServer) ToString() string{
+
+func (s *ZkServer) ToString() string {
 	return s.Ip + ":" + s.Port
 }
 
@@ -157,7 +178,8 @@ func (s *ZkServer) ToString() string{
 type Conf struct {
 	Servers []ZkServer `json:"zookeepers"`
 }
-func (c*Conf) ServersString() []string{
+
+func (c *Conf) ServersString() []string {
 	strings := make([]string, 0)
 	for _, server := range c.Servers {
 		strings = append(strings, server.ToString())
