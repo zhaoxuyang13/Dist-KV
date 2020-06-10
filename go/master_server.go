@@ -41,7 +41,8 @@ func main() { // start shardMaster Service and register Service according to cmd
 
 	/* start RPC Service on ip:port */
 	grpcServer := grpc.NewServer()
-	master.RegisterShardingServiceServer(grpcServer, new(master.ShardMaster))
+	masterServer := master.NewShardMaster(20)
+	master.RegisterShardingServiceServer(grpcServer, masterServer)
 	listen, err := net.Listen("tcp", ip+":"+args[1]) // hard configure TCP
 	if err != nil {
 		log.Fatal(err)

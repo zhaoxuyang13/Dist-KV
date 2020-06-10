@@ -11,11 +11,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/go/common/lock/lock.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/master_server" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master/master_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master_test.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master/sharding.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/sharding.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/master_server.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master_server.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave.pb.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.pb.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave.proto" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave_test.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave_server.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave_server.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/slave_server" beforeDir="false" afterPath="$PROJECT_DIR$/slave_server" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" beforeDir="false" afterPath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -169,21 +175,5 @@
       <screen x="0" y="0" width="1440" height="900" />
     </state>
     <state x="385" y="196" width="670" height="676" key="search.everywhere.popup/0.0.1440.900@0.0.1440.900" timestamp="1591415600888" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/go/master/master_test.go</url>
-          <line>2</line>
-          <option name="timeStamp" value="2" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/go/slave/slave.go</url>
-          <line>3</line>
-          <option name="timeStamp" value="3" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>

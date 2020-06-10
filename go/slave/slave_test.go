@@ -2,41 +2,63 @@ package slave
 
 import (
 	"context"
+	//"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSlave_KV(t *testing.T) {
-	slave := Slave{}
+	assert := assert.New(t)
+	slave := Slave{
+		//bigLock: sync.Mutex{},
+		//keyLocks: make(map[string]*sync.Mutex),
+		LocalStorages: make(map[int32]*LocalStorage),
+	}
 	var ctx context.Context
 	args := Request{
-		VnodeNum : 0,
+		ShardID : 0,
 		Key : "test Key",
 		Value : "test Value",
 	}
 
-	res, err := slave.Put(ctx, &args)
-	if err != nil {
-		t.Errorf("Put operation failed \n" + err.Error())
+	if _, err := slave.Put(ctx, &args); err != nil {
+		assert.Fail("Put operation failed \n" + err.Error())
+	}else {
+		print("put K-V: " + args.GetKey() )
 	}
-	print("put K-V: " + args.GetKey() + "-" + res.GetValue())
-
-	res, err = slave.Get(ctx, &args)
-	if err != nil {
-		t.Errorf("Get operation failed \n" + err.Error())
+	if res, err := slave.Get(ctx, &args);err != nil {
+		assert.Fail("Get operation failed \n" + err.Error())
+	}else {
+		print("get Value " + res.GetValue() + "for key " + args.GetKey())
 	}
-	print("get Value " + res.GetValue() + "for key " + args.GetKey())
-
-	res, err = slave.Del(ctx, &args)
-	if err != nil {
-		t.Errorf("delete operation failed \n" + err.Error())
+	if _, err := slave.Del(ctx, &args); err != nil {
+		assert.Fail("delete operation failed \n" + err.Error())
 	}
 
-	res, err = slave.Get(ctx, &args)
-	if err == nil && res != nil{
-		t.Errorf("delete operation failed")
+	if res, err := slave.Get(ctx, &args); err == nil && res != nil{
+		assert.Fail("delete operation failed")
+	}else {
+		print("key deleted \n" + err.Error())
 	}
-	print("key deleted \n" + err.Error())
-
 	/* immulate RPC call by directly calling */
-
 }
+/*
+Access single key concurrently
+*/
+//func TestKV_Concurrent_Single(t *testing.T){
+//	assert := assert.New(t)
+//	slave := Slave{
+//		//bigLock: sync.Mutex{},
+//		//keyLocks: make(map[string]*sync.Mutex),
+//		LocalStorages: make(map[int32]*LocalStorage),
+//	}
+//	var ctx context.Context
+//	args := Request{
+//		ShardID : 0,
+//		Key : "key1",
+//		Value : "value1",
+//	}
+//
+//
+//}

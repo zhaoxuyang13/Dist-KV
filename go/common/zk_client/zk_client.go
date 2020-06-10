@@ -12,7 +12,7 @@ type ServiceNode struct {
 	Name     string `json:"name"` // 服务名称，这里是user
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
-	Hostname string `json:"hostname"` // hostname of this service
+	Hostname string `json:"hostname"` // hostname of this service, not exactly like hostname
 }
 
 // 在定义一个服务发现的客户端结构体SdClient。

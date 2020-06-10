@@ -11,6 +11,7 @@
 - [x] Master - Join/Leave/Query interface
 - [x] Client - Automatic primary/back selection in starting.
 - [x] Master - register logic
+- [ ] Master - filter out duplicate RPCs
 - [ ] Lock library (for slaves data access)
 - [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Slave backup & primary failed re-election logic
