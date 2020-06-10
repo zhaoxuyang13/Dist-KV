@@ -60,8 +60,13 @@ func splitWork(M int, N int) []int {
 	return proportion
 }
 func (m *ShardMaster) splitWork(N int) []int {
-	return splitWork(m.ShardNum, N)
+	if N != 0 {
+		return splitWork(m.ShardNum, N)
+	}else {
+		return nil
+	}
 }
+
 
 /*
 Join : join serveral new groups to shardmaster, and re-balance
@@ -77,14 +82,15 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 		panic("no way")
 	}
 
-	/* make some changes to lastest conf */
+	/* make some changes to latest conf */
 	/* determine how many shards each group will have after */
 	oldGroupNum := len(latestConf.Groups)
 	//oldSplit := m.splitWork(oldGroupNum)
 	newGroupNum := oldGroupNum + len(req.Mapping)
 	newSplit := m.splitWork(newGroupNum)
+	//fmt.Printf("	newsplit %v\n", newSplit)
 
-	/* shards taken from some and  re-balance to others */
+	/* shards taken from some */
 	shardsTaken := make([]int, 0, m.ShardNum)
 	index := 0
 	if oldGroupNum == 0 { /* start from empty*/
@@ -103,9 +109,11 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 			index++
 		}
 	}
+	//fmt.Printf("	shardsTaken %v\n", shardsTaken)
 
-	newConf := latestConf // maybe merge latest conf with new conf
+	newConf,_ := latestConf.DeepCopy() // maybe merge latest conf with new conf
 	begin := 0
+	/*  re-balance to others  */
 	for gid, serverConfs := range req.Mapping {
 		group := NewGroup(int(gid), serverConfs)
 		group.Shards = shardsTaken[begin : begin+newSplit[index]]
@@ -126,7 +134,7 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 	/* update the change back to ShardMaster*/
 	m.latest++
 	newConf.Version = m.latest
-	m.Confs = append(m.Confs, newConf)
+	m.Confs = append(m.Confs, *newConf)
 
 	/*unlock(done by defer)*/
 
@@ -157,6 +165,7 @@ func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, err
 	}
 	newSplit := m.splitWork(newGroupNum)
 
+	//fmt.Printf("	newSplit %v\n", newSplit)
 	/* shards taken from some and  re-balance to others */
 	shardsTaken := make([]int, 0, m.ShardNum)
 	for _, gid := range req.GidList {
@@ -170,8 +179,8 @@ func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, err
 			return nil, errors.New("the gid " + strconv.Itoa(int(gid)) + " in leave list does not exist")
 		}
 	}
-
-	newConf := latestConf // maybe merge latest conf with new conf
+	//fmt.Printf("	shardsTaken %v\n", shardsTaken)
+	newConf,_ := latestConf.DeepCopy() // maybe merge latest conf with new conf
 	begin := 0
 	index := 0
 	for gid, group := range latestConf.Groups {
@@ -179,7 +188,7 @@ func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, err
 		if newSplit[index] > oldLen {
 			oldGroup := newConf.Groups[gid]
 			oldGroup.Shards = append(oldGroup.Shards, shardsTaken[begin:begin+newSplit[index]-oldLen]...)
-			latestConf.Groups[gid] = oldGroup
+			newConf.Groups[gid] = oldGroup
 		}
 		for _, shardID := range shardsTaken[begin : begin+newSplit[index]-oldLen] {
 			newConf.Assignment[shardID] = gid
@@ -192,7 +201,7 @@ func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, err
 	/* update the change back to ShardMaster*/
 	m.latest++
 	newConf.Version = m.latest
-	m.Confs = append(m.Confs, newConf)
+	m.Confs = append(m.Confs, *newConf)
 
 	/*unlock(done by defer)*/
 
@@ -208,7 +217,7 @@ func (m *ShardMaster) Query(ctx context.Context, req *QueryRequest) (*Conf, erro
 	if req.ConfVersion == -1 { /*asking for latest configuration*/
 		return m.Confs[m.latest].ToConf()
 	} else if req.ConfVersion >= 0 && int(req.ConfVersion) <= m.latest {
-		return m.Confs[m.latest].ToConf()
+		return m.Confs[req.ConfVersion].ToConf()
 	} else {
 		return nil, errors.New("conf version not valid")
 	}

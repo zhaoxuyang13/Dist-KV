@@ -107,11 +107,13 @@ func TestShardMaster_Join_Leave(t *testing.T) {
 		assert.True(gid == 2)
 	}
 
+	fmt.Printf("conf %+v\n", sm.Confs[3])
 	sm.Join(ctx, &group34)
+	fmt.Printf("conf %+v\n", sm.Confs[4])
 	sm.Leave(ctx, &gid23)
 	assert.True(sm.ShardNum == 20 && sm.latest == 5 && len(sm.Confs) == 6)
 	for _, gid := range sm.Confs[5].Assignment {
-		assert.True(gid == 4)
+		assert.Truef(gid == 4,"all shards belongs to gid 4")
 	}
 
 	fmt.Printf("conf %+v\n", sm.Confs[5])
@@ -161,6 +163,29 @@ func TestShardMaster_Join_Leave(t *testing.T) {
 		assert.True(len(counters) == 4)
 		for _, count := range counters{
 			assert.True(count == 5)
+		}
+	}
+	/* check if older configuration not changed */
+	if conf,err := sm.Query(ctx, &QueryRequest{
+		ConfVersion: 2,
+	}); err != nil{
+		assert.Fail(err.Error())
+	}else {
+		c := NewConf(conf)
+		assert.True(c.Version == 2)
+
+		fmt.Printf("configuration version 2: %+v\n", c)
+		counters := make(map[int]int)
+		for _, gid := range c.Assignment {
+			if value,exist := counters[gid] ; !exist{
+				counters[gid] = 1
+			}else {
+				counters[gid] = value + 1
+			}
+		}
+		assert.True(len(counters) == 2)
+		for _, count := range counters{
+			assert.True(count == 10)
 		}
 	}
 

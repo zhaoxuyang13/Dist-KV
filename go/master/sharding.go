@@ -58,6 +58,27 @@ type Configuration struct {
 }
 
 /*
+DeepCopy :
+	map will be copied by reference by default, need explicit deep copy
+*/
+func (c *Configuration)DeepCopy() (*Configuration,error){
+	groups := make(map[int]Group)
+	for k,v := range c.Groups{
+		groups[k] = v
+	}
+	assignment := make(map[int]int)
+	for k,v := range c.Assignment {
+		assignment[k] = v
+	}
+	return &Configuration{
+		Version:    c.Version,
+		ShardNum:   c.ShardNum,
+		Groups:     groups,
+		Assignment: assignment,
+	},nil
+}
+
+/*
 ToConf helper method, convert Configuration to Conf
 */
 func (c *Configuration) ToConf() (*Conf, error) {
