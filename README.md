@@ -10,7 +10,7 @@
 - [x] Client - A REPL interface
 - [x] Master - Join/Leave/Query interface
 - [x] Client - Automatic primary/back selection in starting.
-- [ ] Master - register logic
+- [x] Master - register logic
 - [ ] Lock library (for slaves data access)
 - [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Slave backup & primary failed re-election logic
@@ -33,7 +33,7 @@ $ docker-compose -f zk-cluster up
 **Slave**
 
 ```bash
-$ go run go/slave.go [ip] [port] [hostname] [groupID]
+$ go run go/slave_server.go [ip] [port] [hostname] [groupID]
 # ip and port expose as RPC service
 # hostname is used to distinguish
 # groupID  is for grouping.
@@ -42,7 +42,7 @@ $ go run go/slave.go [ip] [port] [hostname] [groupID]
 **Master**
 
 ```
-$ go run go/master.go
+$ go run go/master_server.go
 ```
 
 **Client** 

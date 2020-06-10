@@ -2,7 +2,6 @@ package master
 
 import (
 	"context"
-	. "ds/go/common/sharding"
 	"fmt"
 	"testing"
 
@@ -43,6 +42,19 @@ func TestShardMaster_Join_Leave(t *testing.T) {
 			},
 			4: {
 				Names: []string{"4a", "4b", "4c"},
+			},
+		},
+	}
+	group567 := JoinRequest{
+		Mapping: map[int32]*JoinRequest_ServerConfs{
+			5: {
+				Names: []string{"5a", "5b", "5c"},
+			},
+			6: {
+				Names: []string{"6a", "6b", "6c"},
+			},
+			7: {
+				Names: []string{"7a", "7b", "7c"},
 			},
 		},
 	}
@@ -105,23 +117,51 @@ func TestShardMaster_Join_Leave(t *testing.T) {
 	fmt.Printf("conf %+v\n", sm.Confs[5])
 
 	/* leave last gid, will fail, and take no effect */
-	_, err = sm.Leave(ctx, &gid2)
-	assert.True(err != nil)
-
-	conf, err := sm.Query(ctx, &QueryRequest{
+	if _, err = sm.Leave(ctx, &gid2); err == nil {
+		assert.Fail("should report error here :" +err.Error())
+	}
+	/* query for result*/
+	if conf, err := sm.Query(ctx, &QueryRequest{
 		ConfVersion: -1,
-	})
-	if err != nil {
+	}); err != nil {
+		assert.Fail(err.Error())
+	}else {
+		c := NewConf(conf)
+		assert.True(c.Version == sm.latest)
+		assert.True(len(c.Groups[4].Shards) == sm.ShardNum)
+		assert.True(len(c.Groups) == 1)
+
+		fmt.Printf("configuration read: %+v\n", c)
+		for _, gid := range c.Assignment {
+			assert.True(gid == 4)
+		}
+	}
+
+	/* add 3 new servers, and query for result */
+	if _,err = sm.Join(ctx,&group567); err != nil{
 		assert.Fail(err.Error())
 	}
-	c := NewConf(conf)
-	assert.True(c.Version == sm.latest)
-	assert.True(len(c.Groups[4].Shards) == sm.ShardNum)
-	assert.True(len(c.Groups) == 1)
+	if conf,err := sm.Query(ctx, &QueryRequest{
+		ConfVersion: -1,
+	}); err != nil{
+		assert.Fail(err.Error())
+	}else {
+		c := NewConf(conf)
+		assert.True(c.Version == sm.latest)
 
-	fmt.Printf("configuration read: %+v", c)
-	for _, gid := range c.Assignment {
-		assert.True(gid == 4)
+		fmt.Printf("configuration read: %+v\n", c)
+		counters := make(map[int]int)
+		for _, gid := range c.Assignment {
+			if value,exist := counters[gid] ; !exist{
+				counters[gid] = 1
+			}else {
+				counters[gid] = value + 1
+			}
+		}
+		assert.True(len(counters) == 4)
+		for _, count := range counters{
+			assert.True(count == 5)
+		}
 	}
 
 }

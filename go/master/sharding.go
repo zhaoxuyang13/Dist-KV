@@ -1,8 +1,6 @@
-package sharding
+package master
 
 import (
-	. "ds/go/master"
-	master "ds/go/master"
 	"hash/crc32"
 )
 
@@ -24,7 +22,7 @@ type Group struct {
 }
 
 /* current only support 2 confs*/
-func NewGroup(gid int, servers *master.JoinRequest_ServerConfs) *Group {
+func NewGroup(gid int, servers *JoinRequest_ServerConfs) *Group {
 	group := Group{
 		Gid:     int(gid),
 		Servers: servers.Names,
@@ -92,7 +90,7 @@ func (c *Configuration) ToConf() (*Conf, error) {
 }
 
 /*
-NewConf helper functino , convet Conf to Configuration
+NewConf helper function , convert Conf to Configuration
 */
 func NewConf(conf *Conf) *Configuration {
 	mapping := make(map[int]Group)

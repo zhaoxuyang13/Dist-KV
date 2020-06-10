@@ -16,9 +16,10 @@ import (
 func main() { // start shardMaster Service and register Service according to cmdline arguments
 
 	/* read cmdline arguments and load configuration file*/
-	args := os.Args[1:] // args without program name, determine Ip:Port name of this master.
+	args := os.Args[1:] // args without program name, determine Ip:Port hostname of this master.
 	ip := args[0]
 	port, err := strconv.Atoi(args[1])
+	hostname := args[2]
 
 	if err != nil {
 		log.Fatal(err)
@@ -41,13 +42,10 @@ func main() { // start shardMaster Service and register Service according to cmd
 	/* start RPC Service on ip:port */
 	grpcServer := grpc.NewServer()
 	master.RegisterShardingServiceServer(grpcServer, new(master.ShardMaster))
-
 	listen, err := net.Listen("tcp", ip+":"+args[1]) // hard configure TCP
 	if err != nil {
 		log.Fatal(err)
 	}
-	grpcServer.Serve(listen)
-
 
 	client, err := zk_client.NewClient(conf.ServersString(), "/node", 10)
 	if err != nil {
@@ -55,18 +53,25 @@ func main() { // start shardMaster Service and register Service according to cmd
 	}
 	defer client.Close()
 
-	slave := zk_client.ServiceNode{Name: "slave", Host: ip, Port: port}
+	/* defer execute in LIFO, close connection at last*/
+	defer func() {
+		fmt.Println("master serving at ip:port " + ip + ":" + strconv.Itoa(port))
+		grpcServer.Serve(listen)
+	}()
 
-	if err := client.Register(&slave); err != nil {
-		panic(err)
+	master := zk_client.ServiceNode{Name: "master", Host: ip, Port: port,Hostname: hostname}
+
+	/* only one master allow, seems ok to use tryPrimary logic*/
+	if err := client.TryPrimary(&master); err != nil {
+		log.Fatalf("error: %v", err)
 	}
 
-	nodes, err := client.GetNodes("slave")
+	nodes, err := client.GetNodes("master")
 	if err != nil {
 		panic(err)
 	}
 	for _, node := range nodes {
-		fmt.Println(node.Host, node.Port)
+		fmt.Println(node.Host, node.Port,node.Hostname)
 	}
 
 }
