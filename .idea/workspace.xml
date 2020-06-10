@@ -11,17 +11,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/go/master_server.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go/slave_server.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/slave_server" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/common/zk_client/zk_client_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/zk_client/zk_client_test.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master_test.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/slave_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave_test.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" beforeDir="false" afterPath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

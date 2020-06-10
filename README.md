@@ -10,13 +10,11 @@
 - [x] Client - A REPL interface
 - [x] Master - Join/Leave/Query interface
 - [x] Client - Automatic primary/back selection in starting.
-- [ ] Client - Automatic primary/backup selection when failing
-- [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
+- [ ] Master - register logic
 - [ ] Lock library (for slaves data access)
-- [ ] Slave
-- [ ] Slave backup (maybe together with Slave)
-- [ ] Master
-- [ ] Client
+- [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
+- [ ] Slave backup & primary failed re-election logic
+- [ ] Slave backup & primary normal logic
 
 **Features**
 - [ ] multiple backup nodes
@@ -30,11 +28,15 @@
 $ docker-compose -f zk-cluster up
 ```
 
+- [ ] deploy zkper using own script
+
 **Slave**
 
 ```bash
-$ go run go/slave.go [ip] [port]
+$ go run go/slave.go [ip] [port] [hostname] [groupID]
 # ip and port expose as RPC service
+# hostname is used to distinguish
+# groupID  is for grouping.
 ```
 
 **Master**
