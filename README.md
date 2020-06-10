@@ -8,6 +8,8 @@
 - [x] Slave - Put,Del,Get RPC APIs
 - [X] Slave - RPC registering
 - [x] Client - A REPL interface
+- [x] Master - Join/Leave/Query interface
+- [ ] Master - atuomatic primary selection
 - [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Lock library (for slaves data access)
 - [ ] Slave
