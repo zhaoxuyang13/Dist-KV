@@ -7,13 +7,17 @@
 - [x] Slave - service Registering.
 - [x] Slave - Put,Del,Get RPC APIs
 - [X] Slave - RPC registering
-- [ ] Client - A REPL interface
-- [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call
+- [x] Client - A REPL interface
+- [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Lock library (for slaves data access)
 - [ ] Slave
 - [ ] Slave backup (maybe together with Slave)
 - [ ] Master
 - [ ] Client
+
+**Features**
+- [ ] multiple backup nodes
+- [ ] backup for master
 
 ### Build & Run
 
@@ -33,12 +37,12 @@ $ go run go/slave.go [ip] [port]
 **Master**
 
 ```
-
+$ go run go/master.go
 ```
 
 **Client** 
 
 ```
-
+$ go run go/client.go
 ```
 

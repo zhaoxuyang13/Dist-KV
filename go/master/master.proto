@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+option go_package = "ds/go/master";
+
+package master;
+
+//message ServerConf{
+//  string ip = 1;
+//  int32 port = 2;
+//  string name = 3;
+//}
+message JoinRequest {
+  message ServerConfs{
+    repeated string names = 1;
+  }
+  //map from  gid ->  server_names
+  map<int32, ServerConfs> mapping = 1;
+
+}
+
+message LeaveRequest {
+  repeated int32 gidList = 1;
+}
+
+message QueryRequest{
+  int32 confVersion = 1;
+
+}
+
+message Empty{
+
+}
+
+message Conf{
+  int32 version = 1;
+  int32 shardNum = 2;
+
+  message Group {
+    int32 gid = 1;
+    repeated string servers = 2;
+    repeated int32 shards = 3;
+  }
+  // map from a gid -> Group (this map contains all groups in his replica
+  map<int32,Group> mapping = 3;
+
+  //map from a replicaId -> gid (valid assignments for all 0 ~ ShardNum-1
+  map<int32,int32> assignment = 4;
+}
+service ShardingService {
+  rpc Join (JoinRequest) returns (Empty);
+  rpc Leave (LeaveRequest) returns (Empty);
+  rpc Query (QueryRequest) returns (Conf);
+  // rpc Move (Request) returns (Response);
+}

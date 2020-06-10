@@ -1,4 +1,4 @@
-package utils
+package zk_client
  
 import (
 	"testing"

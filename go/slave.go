@@ -3,8 +3,8 @@ package main
 //noinspection ALL
 import (
 	"context"
-	. "ds/go/utils"
 	. "ds/go/slave"
+	"ds/go/common/zk_client"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,7 +117,7 @@ func main() { // start RPC Service and register Service according to cmdline arg
 
 	fmt.Printf("File contents: %s", content) // remove when correct
 
-	var conf Conf
+	var conf zk_client.Conf
 	err = json.Unmarshal([]byte(content), &conf)
 	if err != nil {
 		log.Fatalf("error: %v", err)
@@ -134,13 +134,13 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	}
 	grpcServer.Serve(listen)
 
-	client, err := NewClient(conf.ServersString(), "/node", 10)
+	client, err := zk_client.NewClient(conf.ServersString(), "/node", 10)
 	if err != nil {
 		panic(err)
 	}
 	defer client.Close()
 
-	slave := ServiceNode{Name: "slave", Host: ip, Port: port}
+	slave := zk_client.ServiceNode{Name: "slave", Host: ip, Port: port}
 
 	if err := client.Register(&slave); err != nil {
 		panic(err)

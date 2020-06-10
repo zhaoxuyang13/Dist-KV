@@ -1,0 +1,7 @@
+#!/usr/bin/env bash 
+
+export http_proxy=http://localhost:8001 # 代理地址需要换成自己的
+export https_proxy=http://localhost:8001
+export ftp_proxy=http://localhost:8001
+ 
+exec ${@:1}

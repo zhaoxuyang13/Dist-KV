@@ -1,4 +1,4 @@
-package utils
+package zk_client
 
 import (
 	"encoding/json"
@@ -157,7 +157,7 @@ func (s *ZkServer) ToString() string{
 type Conf struct {
 	Servers []ZkServer `json:"zookeepers"`
 }
-func (c* Conf) ServersString() []string{
+func (c*Conf) ServersString() []string{
 	strings := make([]string, 0)
 	for _, server := range c.Servers {
 		strings = append(strings, server.ToString())

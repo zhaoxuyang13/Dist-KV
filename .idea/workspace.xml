@@ -11,10 +11,24 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/go/common/consistentHash/consistantHash.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go/common/consistentHash/consistantHash_test.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go/common/sharding/sharding.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go/master/master.pb.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go/master/master.proto" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go/master_test.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/local-proxy" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go.sum" beforeDir="false" afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/client.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/utils/zk_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/utils/zk_client_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/zk_client/zk_client_test.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" beforeDir="false" afterPath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -45,6 +59,7 @@
   </component>
   <component name="PropertiesComponent">
     <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
+    <property name="DefaultGoTemplateProperty" value="Go File" />
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
@@ -54,15 +69,21 @@
     <property name="go.import.settings.migrated" value="true" />
     <property name="go.sdk.automatically.set" value="true" />
     <property name="go.tried.to.enable.integration.vgo.integrator" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/go" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="nodejs_package_manager_path" value="npm" />
-    <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
+    <property name="settings.editor.selected.configurable" value="http.proxy" />
   </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
       <recent name="$PROJECT_DIR$/go" />
+      <recent name="$PROJECT_DIR$/go/master" />
+      <recent name="$PROJECT_DIR$/go/utils/consistantHash" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/go/utils/sharding" />
+      <recent name="$PROJECT_DIR$/go/utils/zk_client" />
+      <recent name="$PROJECT_DIR$/go/utils/consistantHash" />
       <recent name="$PROJECT_DIR$/go/Slave" />
       <recent name="$PROJECT_DIR$/go" />
     </key>
@@ -109,10 +130,11 @@
       <screen x="47" y="23" width="1873" height="1057" />
     </state>
     <state x="783" y="391" key="#Go_Modules/293.1103.1440.877/47.23.1873.1057@47.23.1873.1057" timestamp="1591376797187" />
-    <state x="433" y="259" key="#com.intellij.fileTypes.FileTypeChooser" timestamp="1591402821181">
-      <screen x="0" y="0" width="1440" height="900" />
+    <state x="577" y="311" key="#com.intellij.fileTypes.FileTypeChooser" timestamp="1591748367915">
+      <screen x="0" y="0" width="1920" height="1080" />
     </state>
     <state x="433" y="259" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1440.900@0.0.1440.900" timestamp="1591402821181" />
+    <state x="577" y="311" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1920.1080@0.0.1920.1080" timestamp="1591748367915" />
     <state x="441" y="228" key="EnvironmentVariablesDialog" timestamp="1591409184670">
       <screen x="0" y="0" width="1440" height="900" />
     </state>
@@ -137,13 +159,34 @@
     </state>
     <state width="1878" height="305" key="GridCell.Tab.0.right/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591399336291" />
     <state width="1358" height="271" key="GridCell.Tab.0.right/293.1103.1440.877/47.23.1873.1057@47.23.1873.1057" timestamp="1591377076438" />
-    <state x="139" y="88" key="SettingsEditor" timestamp="1591409260126">
-      <screen x="0" y="0" width="1440" height="900" />
+    <state x="323" y="180" key="SettingsEditor" timestamp="1591750065702">
+      <screen x="0" y="0" width="1920" height="1080" />
     </state>
     <state x="139" y="88" key="SettingsEditor/0.0.1440.900@0.0.1440.900" timestamp="1591409260126" />
+    <state x="323" y="180" key="SettingsEditor/0.0.1920.1080@0.0.1920.1080" timestamp="1591750065702" />
+    <state x="185" y="106" key="SettingsEditor/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591715770660" />
+    <state x="339" y="0" width="1581" height="781" key="dock-window-1" timestamp="1591495321235">
+      <screen x="0" y="0" width="1920" height="1080" />
+    </state>
+    <state x="339" y="0" width="1581" height="781" key="dock-window-1/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591495321235" />
+    <state x="556" y="106" width="1630" height="781" key="dock-window-2" timestamp="1591495321236">
+      <screen x="0" y="0" width="1920" height="1080" />
+    </state>
+    <state x="556" y="106" width="1630" height="781" key="dock-window-2/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591495321236" />
     <state x="385" y="196" width="670" height="676" key="search.everywhere.popup" timestamp="1591415600888">
       <screen x="0" y="0" width="1440" height="900" />
     </state>
     <state x="385" y="196" width="670" height="676" key="search.everywhere.popup/0.0.1440.900@0.0.1440.900" timestamp="1591415600888" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/go/slave.go</url>
+          <line>3</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

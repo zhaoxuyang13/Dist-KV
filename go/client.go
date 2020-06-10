@@ -11,19 +11,8 @@ import (
 	//"log"
 	"os"
 )
-/* put a key-value  pair
-	1. go to master and ask for key's ip/port
-	2. go to client and put the value.
-*/
-func Put(args []string){
-	print("put " + args[0] + " - " +args[1] +"\n")
-}
-func Get(args []string){
-	print("get " + args[0] +"\n")
-}
-func Del(args []string){
-	print("del " + args[0] +"\n")
-}
+
+/* REPL interface of client */
 func help(){
 	print("$ > Dist-KV V0.0, ZXY\n" +
 		"$ > Commands: \n" +
@@ -50,6 +39,24 @@ func shouldContinue(text string) bool {
 func printInvalidCmd(text string) {
 	print("invalid cmd\n")
 }
+
+/* put a key-value  pair
+1. go to master and ask for key's ip/port
+2. go to client and put the value.
+*/
+func Put(args []string){
+	print("put " + args[0] + " - " +args[1] +"\n")
+}
+func Get(args []string){
+	print("get " + args[0] +"\n")
+}
+func Del(args []string){
+	print("del " + args[0] +"\n")
+}
+
+
+
+
 func main() {
 
 	reader := bufio.NewReader(os.Stdin)
@@ -84,7 +91,7 @@ func main() {
 	fmt.Println("Bye!")
 
 
-	/* should move this to test file, and build a client according to it after master done.
+	/* TODO: move this to test file, and build a client according to it after master done.
 	conn, err := grpc.Dial("0.0.0.0:4000", grpc.WithInsecure()) // only for testing
 	if err != nil {
 		log.Fatal(err)
