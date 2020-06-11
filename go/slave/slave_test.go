@@ -13,7 +13,7 @@ func TestSlave_KV(t *testing.T) {
 	slave := Slave{
 		//bigLock: sync.Mutex{},
 		//keyLocks: make(map[string]*sync.Mutex),
-		LocalStorages: make(map[int32]*LocalStorage),
+		LocalStorages: make(map[int]*LocalStorage),
 	}
 	var ctx context.Context
 	args := Request{

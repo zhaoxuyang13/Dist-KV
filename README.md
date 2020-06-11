@@ -34,7 +34,7 @@ $ docker-compose -f zk-cluster up
 **Slave**
 
 ```bash
-$ go run go/slave_server.go [ip] [port] [hostname] [groupID]
+$ go run go/slave_server.go [hostname] [groupID] [ip] [port] 
 # ip and port expose as RPC service
 # hostname is used to distinguish
 # groupID  is for grouping.

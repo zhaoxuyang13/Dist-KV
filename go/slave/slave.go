@@ -8,6 +8,7 @@ import (
 )
 
 var ErrWrongGroup = errors.New("key not managed by this group")
+var ErrNotPrimary = errors.New("don't send request to a back up server")
 /*
 LocalStorages : in-memory kv store using map
 */
@@ -21,6 +22,7 @@ Slave : slave structure implement slave RPC semantics
 type Slave struct{
 	//bigLock sync.Mutex // for keyLocks map
 	//keyLocks map[string]*sync.Mutex
+	Primary bool
 	LocalStorages map[int]*LocalStorage // map from ShardID to LocalStorages
 	Version int // local version number
 	//GroupId int32 // the group id this slave belongs to, used to check configuration

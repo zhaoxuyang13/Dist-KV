@@ -6,6 +6,7 @@ import (
 	"ds/go/master"
 	"ds/go/slave"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"google.golang.org/grpc"
 	"io/ioutil"
@@ -15,33 +16,100 @@ import (
 	"strconv"
 	"time"
 )
-
-func main() { // start RPC Service and register Service according to cmdline arguments
-
-	/* read cmdline arguments and load configuration file*/
-	args := os.Args[1:] // args without program name, determine Ip:Port hostname of this slave.
-	ip := args[0]  // cannot use 0.0.0.0 as localhost, but 127.0.0.1, not a problem in multi computer scenario
-	port, err := strconv.Atoi(args[1])
-	hostname := args[2]
-	groupID, err := strconv.Atoi(args[3])
-
-	if err != nil {
-		log.Fatal(err)
+// TODO: change this function to join/Leave multiple groups
+func updateConf(args []string,client *zk_client.SdClient){
+	command := args[0]
+	groupIDs := make([]int32, 0)
+	for i := 1;i < len(args); i ++ {
+		id, _ := strconv.Atoi(args[i])
+		groupIDs = append(groupIDs, int32(id))
+	}
+	masterClient,conn,_ := getMasterRPCClient(client)
+	defer conn.Close()
+	mappings := make(map[int32]*master.JoinRequest_ServerConfs)
+	for _, gid := range groupIDs{
+		conf := master.JoinRequest_ServerConfs{
+			Names: make([]string,0),
+		}
+		if primaries, err := client.GetNodes("slave_primary/" + strconv.Itoa(int(gid))); err != nil || len(primaries) != 1 {
+			//fmt.Printf("primary at path %s,  %+v\n","slave-primary/" + args[1],primaries)
+			fmt.Println("get primary node error :" + err.Error())
+		}else {
+			conf.Names = append(conf.Names, primaries[0].Hostname)
+		}
+		if backups, err := client.GetNodes("slave_backup/" + args[1]); err != nil {
+			fmt.Println("get primary node error :" + err.Error())
+		}else {
+			for _,backup := range backups{
+				conf.Names = append(conf.Names, backup.Hostname)
+			}
+		}
+		mappings[gid] = &conf
 	}
 
+	if command == "join-group"{
+		masterClient.Join(context.Background(),  &master.JoinRequest{
+			Mapping: mappings,
+		})
+	}else if command == "leave-group" {
+		_, err := masterClient.Leave(context.Background(), &master.LeaveRequest{GidList: groupIDs })
+		if err != nil {
+			fmt.Println("leave-group rpc failed: " + err.Error())
+		}
+	}
+}
+
+var ErrMultipleMaster = errors.New("not supposed to see multiple master")
+var ErrGetNodeFailed = errors.New("zookeeper client get node information error")
+
+func getMasterRPCClient (sdClient *zk_client.SdClient) (master.ShardingServiceClient,*grpc.ClientConn,error){
+	/* connect to master */
+	if masterNodes,err := sdClient.GetNodes("master"); err != nil{
+		log.Fatal(err)
+		return nil,nil,ErrGetNodeFailed
+	}else if len(masterNodes) > 1{
+		log.Fatal(masterNodes)
+		return nil,nil,ErrMultipleMaster
+	}else {
+		serverString := masterNodes[0].Host + ":" + strconv.Itoa(masterNodes[0].Port)
+		fmt.Println("master server String : " + serverString)
+		conn, err := grpc.Dial("127.0.0.1:4100", grpc.WithInsecure())
+		if err != nil {
+			log.Fatal(err)
+			return nil,nil,err
+		}
+		return master.NewShardingServiceClient(conn),conn,nil
+	}
+}
+func main() { // start RPC Service and register Service according to cmdline arguments
+
+	/* read configuration from json file, and start connection with zookeeper cluster */
 	content, err := ioutil.ReadFile("./configuration.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	//fmt.Printf("File contents: %s", content) // remove when correct
-
 	var conf zk_client.Conf
 	err = json.Unmarshal(content, &conf)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-	//fmt.Printf("--- t:\n%v\n\n", conf) // remove when correct
+	sdClient, err := zk_client.NewClient(conf.ServersString(), "/node", 10)
+	if err != nil {
+		panic(err)
+	}
+	defer sdClient.Close()
+
+
+	/* read cmdline arguments and load configuration file*/
+	args := os.Args[1:] // args without program name, determine Ip:Port hostname of this slave.
+	if args[0] == "join-group" || args[0] == "leave-group" { // if only 2 args provided, treat it as a configuration change
+		updateConf(args,sdClient)
+		return
+	}
+	ip := args[0]  // cannot use 0.0.0.0 as localhost, but 127.0.0.1, not a problem in multi computer scenario
+	port, err := strconv.Atoi(args[1])
+	hostname := args[2]
+	groupID, err := strconv.Atoi(args[3])
 
 	/* start RPC Service on ip:port */
 	grpcServer := grpc.NewServer()
@@ -55,17 +123,10 @@ func main() { // start RPC Service and register Service according to cmdline arg
 		},
 	}
 	slave.RegisterKVServiceServer(grpcServer, slaveServer)
-
 	listen, err := net.Listen("tcp", ip+":"+args[1]) // hard configure TCP
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	sdClient, err := zk_client.NewClient(conf.ServersString(), "/node", 10)
-	if err != nil {
-		panic(err)
-	}
-	defer sdClient.Close()
 	/* defer execute in LIFO, close connection at last*/
 	defer func() {
 		fmt.Println("slave server start serving requests at " + ip + ":" + strconv.Itoa(port))
@@ -73,29 +134,22 @@ func main() { // start RPC Service and register Service according to cmdline arg
 			log.Fatal(err)
 		}
 	}()
+
 	/* start timer, slave server will retrieve configuration from master every time period*/
+	/* Wrap it up with function in module slave */
 	defer func(){
 
-		if masterNodes,err := sdClient.GetNodes("master"); err != nil{
-			fmt.Println("Error: get master information error "  + err.Error())
-			log.Fatal(err)
-		}else if len(masterNodes) > 1{
-			fmt.Printf("Error: not supposed to see multiple master %d\n", len(masterNodes))
-			log.Fatal(masterNodes)
-		}else {
-			serverString := masterNodes[0].Host + ":" + strconv.Itoa(masterNodes[0].Port)
-			fmt.Println("master server String : " + serverString)
-			conn, err := grpc.Dial(serverString, grpc.WithInsecure())
-			if err != nil {
-				log.Fatal(err)
+			masterClient,conn,err := getMasterRPCClient(sdClient)
+			if err !=nil {
+				fmt.Println(err.Error())
+				return
 			}
-			masterClient :=  master.NewShardingServiceClient(conn)
 			/* start a separate timer, conn should wait until timer end. */
 			go func() {
 				defer conn.Close()
 				fmt.Println("	update configuration every period time")
 				for range time.Tick(time.Millisecond * 200){
-					fmt.Println("	querying configuration")
+					//fmt.Println(".")
 					conf, err := masterClient.Query(context.Background(), &master.QueryRequest{ConfVersion: -1})
 					if err != nil{
 						log.Fatal(err)
@@ -106,21 +160,25 @@ func main() { // start RPC Service and register Service according to cmdline arg
 						// dont do anything, just skip
 					}else {
 						// deep copy
-						for _,shard := range conf.Mapping[int32(groupID)].Shards{
-							slaveServer.GroupInfo.Shards = append(slaveServer.GroupInfo.Shards, int(shard))
-						}
-						for _,server := range conf.Mapping[int32(groupID)].Servers{
-							slaveServer.GroupInfo.Servers = append(slaveServer.GroupInfo.Servers, server)
-						}
+						slaveServer.GroupInfo.Shards = make([]int, 0)
+						slaveServer.GroupInfo.Servers = make([]string,0)
 						slaveServer.Version = int(conf.Version)
-
+						if group, exist := conf.Mapping[int32(groupID)]; exist{
+							for _,shard := range group.Shards{
+								slaveServer.GroupInfo.Shards = append(slaveServer.GroupInfo.Shards, int(shard))
+							}
+							for _,server := range group.Servers{
+								slaveServer.GroupInfo.Servers = append(slaveServer.GroupInfo.Servers, server)
+							}
+							fmt.Printf("update to: %+v\n",slaveServer)
+						}else {
+							// this group not belongs to confs, not copy configuration,
+						}
 						/* TODO: remove those shards not used */
 					}
 				}
 				fmt.Println("should never reach here")
 			}()
-
-		}
 	}()
 
 	primaryPath := "slave_primary/" + strconv.Itoa(groupID)
@@ -128,11 +186,13 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	slaveNode := zk_client.ServiceNode{Name: primaryPath, Host: ip, Port: port, Hostname: hostname}
 	//fmt.Printf("slavenode %+v\n", slaveNode)
 	if err := sdClient.TryPrimary(&slaveNode); err != nil {
+		slaveServer.Primary = false
 		if err.Error() != "zk: node already exists" {
 			panic(err)
 		}
 	} else {
 		/*select as primary node, just return and wait for rpc service to start*/
+		slaveServer.Primary = true
 		/*nodes, err := sdClient.GetNodes(primaryPath)
 		if err != nil {
 			panic(err)

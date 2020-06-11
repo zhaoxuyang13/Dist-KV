@@ -212,7 +212,7 @@ func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, err
 Query : Query for configuration giving a version
 */
 func (m *ShardMaster) Query(ctx context.Context, req *QueryRequest) (*Conf, error) {
-	fmt.Printf("receive a Query RPC, %v\n", req.ConfVersion)
+	//fmt.Printf("receive a Query RPC, %v\n", req.ConfVersion)
 
 	if req.ConfVersion == -1 { /*asking for latest configuration*/
 		return m.Confs[m.latest].ToConf()
