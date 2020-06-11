@@ -6,7 +6,6 @@ import (
 	"ds/go/master"
 	"ds/go/slave"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"google.golang.org/grpc"
 	"io/ioutil"
@@ -16,7 +15,8 @@ import (
 	"strconv"
 	"time"
 )
-// TODO: change this function to join/Leave multiple groups
+/* fetch group information from zookeeper cluster,
+	and then RPC-call master to update master configuration */
 func updateConf(args []string,client *zk_client.SdClient){
 	command := args[0]
 	groupIDs := make([]int32, 0)
@@ -24,7 +24,7 @@ func updateConf(args []string,client *zk_client.SdClient){
 		id, _ := strconv.Atoi(args[i])
 		groupIDs = append(groupIDs, int32(id))
 	}
-	masterClient,conn,_ := getMasterRPCClient(client)
+	masterClient,conn,_ := master.GetMasterRPCClient(client)
 	defer conn.Close()
 	mappings := make(map[int32]*master.JoinRequest_ServerConfs)
 	for _, gid := range groupIDs{
@@ -32,7 +32,6 @@ func updateConf(args []string,client *zk_client.SdClient){
 			Names: make([]string,0),
 		}
 		if primaries, err := client.GetNodes("slave_primary/" + strconv.Itoa(int(gid))); err != nil || len(primaries) != 1 {
-			//fmt.Printf("primary at path %s,  %+v\n","slave-primary/" + args[1],primaries)
 			fmt.Println("get primary node error :" + err.Error())
 		}else {
 			conf.Names = append(conf.Names, primaries[0].Hostname)
@@ -59,28 +58,7 @@ func updateConf(args []string,client *zk_client.SdClient){
 	}
 }
 
-var ErrMultipleMaster = errors.New("not supposed to see multiple master")
-var ErrGetNodeFailed = errors.New("zookeeper client get node information error")
 
-func getMasterRPCClient (sdClient *zk_client.SdClient) (master.ShardingServiceClient,*grpc.ClientConn,error){
-	/* connect to master */
-	if masterNodes,err := sdClient.GetNodes("master"); err != nil{
-		log.Fatal(err)
-		return nil,nil,ErrGetNodeFailed
-	}else if len(masterNodes) > 1{
-		log.Fatal(masterNodes)
-		return nil,nil,ErrMultipleMaster
-	}else {
-		serverString := masterNodes[0].Host + ":" + strconv.Itoa(masterNodes[0].Port)
-		fmt.Println("master server String : " + serverString)
-		conn, err := grpc.Dial("127.0.0.1:4100", grpc.WithInsecure())
-		if err != nil {
-			log.Fatal(err)
-			return nil,nil,err
-		}
-		return master.NewShardingServiceClient(conn),conn,nil
-	}
-}
 func main() { // start RPC Service and register Service according to cmdline arguments
 
 	/* read configuration from json file, and start connection with zookeeper cluster */
@@ -139,7 +117,7 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	/* Wrap it up with function in module slave */
 	defer func(){
 
-			masterClient,conn,err := getMasterRPCClient(sdClient)
+			masterClient,conn,err := master.GetMasterRPCClient(sdClient)
 			if err !=nil {
 				fmt.Println(err.Error())
 				return

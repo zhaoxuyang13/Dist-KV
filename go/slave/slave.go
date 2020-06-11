@@ -5,6 +5,7 @@ import (
 	"context"
 	"ds/go/master"
 	"errors"
+	"fmt"
 )
 
 var ErrWrongGroup = errors.New("key not managed by this group")
@@ -35,7 +36,7 @@ type Slave struct{
 
 /* TODO add check for Vnode number's validation, slave should maintain valid vnode list. and respond error if not */
 func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
-
+	fmt.Println("put")
 	/* TODO : is it need to acquire lock for the key ? */
 	//s.bigLock.Lock()
 	//if mutex,exist := s.keyLocks[args.GetKey()]; !exist {
@@ -68,7 +69,7 @@ func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
 	return &Empty{}, nil
 }
 func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
-
+	fmt.Println("get")
 	/* TODO : acquire lock for the key, but is it necessary to put a lock on read ?*/
 	/* create if not exist, append if exist*/
 	shardID := int(args.ShardID)
@@ -89,7 +90,7 @@ func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
 	return &reply, nil
 }
 func (s *Slave) Del(ctx context.Context, args *Request) (*Empty, error) {
-
+	fmt.Println("del")
 	//s.bigLock.Lock()
 	//if mutex,exist := s.keyLocks[args.GetKey()]; !exist {
 	//	s.keyLocks[args.GetKey()] = &sync.Mutex{}

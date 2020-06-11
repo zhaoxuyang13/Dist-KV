@@ -11,9 +11,10 @@
 - [x] Master - Join/Leave/Query interface
 - [x] Client - Automatic primary/back selection in starting.
 - [x] Master - register logic
+- [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
+- [ ] Master/Slave/Client - On configuration change, how to shift shards.
 - [ ] Master - filter out duplicate RPCs
 - [ ] Lock library (for slaves data access,necessary?)
-- [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Slave backup & primary failed re-election logic
 - [ ] Slave backup & primary normal logic
 
@@ -34,16 +35,19 @@ $ docker-compose -f zk-cluster up
 **Slave**
 
 ```bash
-$ go run go/slave_server.go [hostname] [groupID] [ip] [port] 
+$ go run go/slave_server.go [ip] [port] [hostname] [groupID] 
 # ip and port expose as RPC service
 # hostname is used to distinguish
 # groupID  is for grouping.
+$ go run go/slave_server.go [command] [groupIDs ...]
+# command = "join-group" / "leave-group"
+# groupIDs is an array of groupid to be configured
 ```
 
 **Master**
 
 ```
-$ go run go/master_server.go
+$ go run go/master_server.go [ip] [port] [hostname]
 ```
 
 **Client** 

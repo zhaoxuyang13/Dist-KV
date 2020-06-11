@@ -11,12 +11,16 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/client" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go/common/Utils/utils.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/client.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/master/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/slave/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/slave/slave_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave_test.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/slave_server.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave_server.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/master_server" beforeDir="false" afterPath="$PROJECT_DIR$/master_server" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/slave_server" beforeDir="false" afterPath="$PROJECT_DIR$/slave_server" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" beforeDir="false" afterPath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -120,11 +124,15 @@
       <screen x="47" y="23" width="1873" height="1057" />
     </state>
     <state x="783" y="391" key="#Go_Modules/293.1103.1440.877/47.23.1873.1057@47.23.1873.1057" timestamp="1591376797187" />
-    <state x="577" y="311" key="#com.intellij.fileTypes.FileTypeChooser" timestamp="1591748367915">
+    <state x="577" y="310" key="#com.intellij.fileTypes.FileTypeChooser" timestamp="1591866987740">
       <screen x="0" y="0" width="1920" height="1080" />
     </state>
     <state x="433" y="259" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1440.900@0.0.1440.900" timestamp="1591402821181" />
-    <state x="577" y="311" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1920.1080@0.0.1920.1080" timestamp="1591748367915" />
+    <state x="577" y="310" key="#com.intellij.fileTypes.FileTypeChooser/0.0.1920.1080@0.0.1920.1080" timestamp="1591866987740" />
+    <state x="744" y="253" key="#com.intellij.ide.util.MemberChooser" timestamp="1591863274338">
+      <screen x="0" y="0" width="1920" height="1080" />
+    </state>
+    <state x="744" y="253" key="#com.intellij.ide.util.MemberChooser/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591863274338" />
     <state x="441" y="228" key="EnvironmentVariablesDialog" timestamp="1591409184670">
       <screen x="0" y="0" width="1440" height="900" />
     </state>

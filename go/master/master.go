@@ -2,8 +2,11 @@ package master
 
 import (
 	"context"
+	"ds/go/common/zk_client"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc"
+	"log"
 	"strconv"
 	"sync"
 )
@@ -31,6 +34,7 @@ func NewShardMaster(shardNum int) *ShardMaster {
 
 	firstConf := Configuration{
 		Version:    0,
+		ShardNum: shardNum,
 		Groups:     make(map[int]Group),
 		Assignment: make(map[int]int),
 	}
@@ -220,5 +224,29 @@ func (m *ShardMaster) Query(ctx context.Context, req *QueryRequest) (*Conf, erro
 		return m.Confs[req.ConfVersion].ToConf()
 	} else {
 		return nil, errors.New("conf version not valid")
+	}
+}
+
+
+var ErrMultipleMaster = errors.New("not supposed to see multiple master")
+var ErrGetNodeFailed = errors.New("zookeeper client get node information error")
+
+func GetMasterRPCClient (sdClient *zk_client.SdClient) (ShardingServiceClient,*grpc.ClientConn,error){
+	/* connect to master */
+	if masterNodes,err := sdClient.GetNodes("master"); err != nil{
+		panic(err)
+		return nil,nil,ErrGetNodeFailed
+	}else if len(masterNodes) > 1{
+		panic(masterNodes)
+		return nil,nil,ErrMultipleMaster
+	}else {
+		serverString := masterNodes[0].Host + ":" + strconv.Itoa(masterNodes[0].Port)
+		fmt.Println("master server String : " + serverString)
+		conn, err := grpc.Dial(serverString, grpc.WithInsecure())
+		if err != nil {
+			log.Fatal(err)
+			return nil,nil,err
+		}
+		return NewShardingServiceClient(conn),conn,nil
 	}
 }
