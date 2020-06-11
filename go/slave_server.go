@@ -20,7 +20,7 @@ func main() { // start RPC Service and register Service according to cmdline arg
 
 	/* read cmdline arguments and load configuration file*/
 	args := os.Args[1:] // args without program name, determine Ip:Port hostname of this slave.
-	ip := args[0]
+	ip := args[0]  // cannot use 0.0.0.0 as localhost, but 127.0.0.1, not a problem in multi computer scenario
 	port, err := strconv.Atoi(args[1])
 	hostname := args[2]
 	groupID, err := strconv.Atoi(args[3])
@@ -46,10 +46,13 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	/* start RPC Service on ip:port */
 	grpcServer := grpc.NewServer()
 	slaveServer := &slave.Slave{
-		LocalStorages: make(map[int32]*slave.LocalStorage),
+		LocalStorages: make(map[int]*slave.LocalStorage),
 		Version: 	   0,
-		GroupId:       int32(groupID),
-		ShardList:     make([]int32,0),
+		GroupInfo: master.Group{
+			Gid:     groupID,
+			Servers: make([]string, 0),
+			Shards:  make([]int,0),
+		},
 	}
 	slave.RegisterKVServiceServer(grpcServer, slaveServer)
 
@@ -82,7 +85,7 @@ func main() { // start RPC Service and register Service according to cmdline arg
 		}else {
 			serverString := masterNodes[0].Host + ":" + strconv.Itoa(masterNodes[0].Port)
 			fmt.Println("master server String : " + serverString)
-			conn, err := grpc.Dial("127.0.0.1:4100", grpc.WithInsecure())
+			conn, err := grpc.Dial(serverString, grpc.WithInsecure())
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -97,13 +100,19 @@ func main() { // start RPC Service and register Service according to cmdline arg
 					if err != nil{
 						log.Fatal(err)
 					}
-					if conf.Version < slaveServer.Version {
+					if int(conf.Version) < slaveServer.Version {
 						fmt.Println("Error: local version larger than remote version")
-					}else if conf.Version == slaveServer.Version{
+					}else if int(conf.Version) == slaveServer.Version{
 						// dont do anything, just skip
 					}else {
-						slaveServer.ShardList = conf.Mapping[slaveServer.GroupId].Shards
-						slaveServer.Version = conf.Version
+						// deep copy
+						for _,shard := range conf.Mapping[int32(groupID)].Shards{
+							slaveServer.GroupInfo.Shards = append(slaveServer.GroupInfo.Shards, int(shard))
+						}
+						for _,server := range conf.Mapping[int32(groupID)].Servers{
+							slaveServer.GroupInfo.Servers = append(slaveServer.GroupInfo.Servers, server)
+						}
+						slaveServer.Version = int(conf.Version)
 
 						/* TODO: remove those shards not used */
 					}

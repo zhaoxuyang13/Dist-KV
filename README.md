@@ -2,7 +2,7 @@
 
 ### TODOs
 
-- [x] Add Yml for configuration of ZK, https://github.com/go-yaml/yaml (though it may be redudant with zk-cluster.yml)
+- [x] Add Yml for configuration of ZK, https://github.com/go-yaml/yaml (though it may be redundant with zk-cluster.yml)
 - [x] change yml to json, for consistency
 - [x] Slave - service Registering.
 - [x] Slave - Put,Del,Get RPC APIs
@@ -12,7 +12,7 @@
 - [x] Client - Automatic primary/back selection in starting.
 - [x] Master - register logic
 - [ ] Master - filter out duplicate RPCs
-- [ ] Lock library (for slaves data access)
+- [ ] Lock library (for slaves data access,necessary?)
 - [ ] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [ ] Slave backup & primary failed re-election logic
 - [ ] Slave backup & primary normal logic
