@@ -19,7 +19,7 @@ type ServiceNode struct {
 /* client information,
 a client connect to a list of servers.
 at a root node
-with a connnection.
+with a connection.
 */
 type SdClient struct {
 	zkServers []string // 多个节点地址

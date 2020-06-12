@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io/ioutil"
 	"log"
 	"os"
@@ -47,7 +49,7 @@ func printInvalidCmd(text string) {
 }
 
 var ErrInvalidConf = errors.New("problematic configuration file")
-
+var MaxRetry = 3
 func (c *UserClient) Key2Server(key string) (string,int, error) {
 	shardID := Utils.Key2shard(key, c.conf.ShardNum)
 	gid, exist := c.conf.Assignment[shardID]
@@ -59,7 +61,7 @@ func (c *UserClient) Key2Server(key string) (string,int, error) {
 		return "",0, ErrInvalidConf
 	}
 	serverString := serviceNode.Host + ":" + strconv.Itoa(serviceNode.Port)
-	return serverString,gid, nil
+	return serverString,shardID, nil
 }
 
 /* Put a key-value  pair
@@ -72,78 +74,147 @@ func (c *UserClient) Key2Server(key string) (string,int, error) {
 func (c *UserClient) Put(args []string) {
 	key := args[0]
 	value := args[1]
-	print("put " + key + " - " + value + "\n")
-
-	if targetServer,gid,err := c.Key2Server(args[0]); err!=nil {
-		panic(err)
-	}else {
-		if conn, err := grpc.Dial(targetServer, grpc.WithInsecure());err != nil {
-			panic(err)
+	try := 0
+	for try < MaxRetry {
+		err := c.SimplePut(args)
+		if err == nil {
+			fmt.Printf("put success: \"%s\" = \"%s\" \n",key,value)
+			return
 		}else {
-			defer conn.Close()
-			client := slave.NewKVServiceClient(conn)
-			if _, err := client.Put(context.Background(), &slave.Request{
-				ShardID: int32(gid),
-				Key: key,
-				Value: value,
-			}); err != nil {
-				panic(err)
-			}else {
-				fmt.Printf("\"%s\" = \"%s\"\n",key,value)
+			errStatus, _ := status.FromError(err)
+			try ++
+			switch errStatus.Code() {
+			case codes.Unavailable: fallthrough
+			case codes.PermissionDenied: // TODO : not primary case
+				c.updateConf()
+			default:
+				fmt.Println("unhandled err: " + err.Error())
+
 			}
 		}
 	}
 
 }
+/* simple put don't handle error */
+func (c *UserClient) SimplePut(args []string) error {
+	key := args[0]
+	value := args[1]
+	print("put " + key + " - " + value + "\n")
+	if targetServer, shardID, err := c.Key2Server(args[0]); err != nil {
+		panic(err)
+	} else {
+		if conn, err := grpc.Dial(targetServer, grpc.WithInsecure()); err != nil {
+			fmt.Println("client: grpc dialing failed, error: " + err.Error())
+			return err
+		} else {
+			defer conn.Close()
+			client := slave.NewKVServiceClient(conn)
+			if _, err := client.Put(context.Background(), &slave.Request{
+				ShardID: int32(shardID),
+				Key:     key,
+				Value:   value,
+			}); err != nil {
+				return err
+			}else {
+				return nil
+			}
+		}
+	}
+}
 func (c *UserClient) Get(args []string) {
 	key := args[0]
+	try := 0
+	for try < MaxRetry {
+		value, err := c.SimpleGet(args)
+		if err == nil {
+			fmt.Printf("\"%s\" = \"%s\" \n",key,value)
+			return
+		}else {
+			errStatus, _ := status.FromError(err)
+			try ++
+			switch errStatus.Code() {
+			case codes.NotFound:
+				fmt.Printf("\"%s\" not exist \n",key)
+				return
+			case codes.Unavailable: fallthrough
+			case codes.PermissionDenied: // TODO : not primary case
+				c.updateConf()
+			default:
+				fmt.Println("unhandled err: " + err.Error())
+			}
+		}
+	}
+}
+func (c *UserClient) SimpleGet(args []string) (string,error){
+	key := args[0]
 	print("get " + key + "\n")
-	if targetServer,gid,err := c.Key2Server(args[0]); err!=nil {
-		//fmt.Println(err.Error())
+	if targetServer,shardID,err := c.Key2Server(args[0]); err!=nil {
 		panic(err)
 	}else {
 		if conn, err := grpc.Dial(targetServer, grpc.WithInsecure());err != nil {
-			//fmt.Println(err.Error())
-			panic(err)
+			fmt.Println("client: grpc dialing failed, error: " + err.Error())
+			return "",err
 		}else {
 			defer conn.Close()
 			client := slave.NewKVServiceClient(conn)
 			if response, err := client.Get(context.Background(), &slave.Request{
-				ShardID: int32(gid),
+				ShardID: int32(shardID),
 				Key: key,
 			}); err != nil {
-				panic(err)
+				return "",err
 			}else {
-				fmt.Printf("\"%s\" = \"%s\" \n",key,response.Value)
+				return response.Value,nil
 			}
 		}
 	}
 }
 func (c *UserClient) Del(args []string) {
 	key := args[0]
-	print("del " + key + "\n")
-	if targetServer,gid,err := c.Key2Server(args[0]); err!=nil {
-		//fmt.Println(err.Error())
-		panic(err)
-	}else {
-		if conn, err := grpc.Dial(targetServer, grpc.WithInsecure());err != nil {
-			//fmt.Println(err.Error())
-			panic(err)
+	try := 0
+	for try < MaxRetry {
+		err := c.SimpleDel(args)
+		if err == nil {
+			fmt.Printf("\"%s\" deleted\n",key)
+			return
 		}else {
-			defer conn.Close()
-			client := slave.NewKVServiceClient(conn)
-			if _, err := client.Del(context.Background(), &slave.Request{
-				ShardID: int32(gid),
-				Key: key,
-			}); err != nil {
-				panic(err)
-			}else {
-				fmt.Printf("\"%s\" deleted\n",key)
+			errStatus, _ := status.FromError(err)
+			try ++
+			switch errStatus.Code() {
+			case codes.NotFound:
+				fmt.Printf("\"%s\" not exist \n",key)
+				return
+			case codes.Unavailable: fallthrough
+			case codes.PermissionDenied: // TODO : not primary case
+				c.updateConf()
+			default:
+				fmt.Println("unhandled err: " + err.Error())
 			}
 		}
 	}
 }
-
+func (c *UserClient) SimpleDel(args []string) error {
+	key := args[0]
+	print("del " + key + "\n")
+	if targetServer,shardID,err := c.Key2Server(args[0]); err!=nil {
+		panic(err)
+	}else {
+		if conn, err := grpc.Dial(targetServer, grpc.WithInsecure());err != nil {
+			fmt.Println("client: grpc dialing failed, error: " + err.Error())
+			return err
+		}else {
+			defer conn.Close()
+			client := slave.NewKVServiceClient(conn)
+			if _, err := client.Del(context.Background(), &slave.Request{
+				ShardID: int32(shardID),
+				Key: key,
+			}); err != nil {
+				return err
+			}else {
+				return nil
+			}
+		}
+	}
+}
 type UserClient struct {
 	conf      master.Configuration
 	primaries map[int]zk_client.ServiceNode

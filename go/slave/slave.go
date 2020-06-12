@@ -3,13 +3,23 @@ package slave
 //noinspection ALL
 import (
 	"context"
+	"ds/go/common/Utils"
 	"ds/go/master"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+var (
+	/* when request is for gid not belong to this group*/
+
+	ErrWrongGroup = errors.New("key not managed by this group")
+	/* when slave is backup and request is not from primary*/
+	ErrNotPrimary = errors.New("don't send request to a back up server")
+	/* for del and get operation, key is managed by this group, but not in the storage */
+	ErrNotFound = errors.New("key not exist on this machine's storage")
 )
 
-var ErrWrongGroup = errors.New("key not managed by this group")
-var ErrNotPrimary = errors.New("don't send request to a back up server")
 /*
 LocalStorages : in-memory kv store using map
 */
@@ -32,7 +42,7 @@ type Slave struct{
 }
 
 
-//var localStorages = make(map[int32]*LocalStorages)
+
 
 /* TODO add check for Vnode number's validation, slave should maintain valid vnode list. and respond error if not */
 func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
@@ -49,9 +59,12 @@ func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
 
 	/* create if not exist, append if exist*/
 	shardID := int(args.ShardID)
+	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+		//fmt.Printf("%+v, %d\n", s, shardID )
+		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
+	}
 	if localStorage, ok := s.LocalStorages[shardID]; ok {
 		localStorage.storage[args.GetKey()] = args.GetValue()
-
 	} else {
 		ls := LocalStorage{
 			storage: make(map[string]string),
@@ -62,10 +75,6 @@ func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
 
 	/* release lock for the key, done by defer*/
 
-	//reply := Response{
-	//	Value: "put " + strconv.Itoa(int(args.ShardID)) + " of key " + args.GetKey() + " of value " + args.GetValue(),
-	//} // echo server primitive
-
 	return &Empty{}, nil
 }
 func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
@@ -73,21 +82,21 @@ func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
 	/* TODO : acquire lock for the key, but is it necessary to put a lock on read ?*/
 	/* create if not exist, append if exist*/
 	shardID := int(args.ShardID)
-	localStorage, ok := s.LocalStorages[shardID]
-	if !ok {
-		return nil, errors.New("Vnode not exist on this machine\n")
+	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
-
-	res, ok := localStorage.storage[args.GetKey()]
-	if !ok {
-		return nil, errors.New("Key not exist on this machine's vnode\n")
+	if localStorage, ok := s.LocalStorages[shardID]; !ok {
+		return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+	}else {
+		if res, ok := localStorage.storage[args.GetKey()]; !ok {
+			return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+		}else {
+			reply := Response{
+				Value: res,
+			}
+			return &reply, nil
+		}
 	}
-
-	reply := Response{
-		Value: res,
-	}
-
-	return &reply, nil
 }
 func (s *Slave) Del(ctx context.Context, args *Request) (*Empty, error) {
 	fmt.Println("del")
@@ -102,23 +111,20 @@ func (s *Slave) Del(ctx context.Context, args *Request) (*Empty, error) {
 
 	/* create if not exist, append if exist*/
 	shardID := int(args.ShardID)
-	localStorage, ok := s.LocalStorages[shardID]
-	if !ok {
-		return nil, errors.New("Vnode not exist on this machine\n")
+	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
-
-	_, ok = localStorage.storage[args.GetKey()]
-	if ok {
-		delete(localStorage.storage, args.GetKey())
-	} else {
-		return nil, errors.New("Key not exist on this machine's vnode\n")
+	if localStorage, ok := s.LocalStorages[shardID]; !ok {
+		/* localStorage not exist */
+		return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+	}else {
+		if _, ok = localStorage.storage[args.GetKey()]; !ok {
+			/* storage entry not exist*/
+			return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+		} else {
+			delete(localStorage.storage, args.GetKey())
+			return &Empty{}, nil
+		}
 	}
-
-	//reply := Response{
-	//	Value: "successful delete " + args.GetKey(),
-	//} // echo server primitive
-
 	/*release lock for the key, done by defer*/
-
-	return &Empty{}, nil
 }

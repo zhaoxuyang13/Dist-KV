@@ -15,17 +15,21 @@ import (
 	"strconv"
 	"time"
 )
+
 /* fetch group information from zookeeper cluster,
 	and then RPC-call master to update master configuration */
 func updateConf(args []string,client *zk_client.SdClient){
+	/* parse arguments */
 	command := args[0]
 	groupIDs := make([]int32, 0)
 	for i := 1;i < len(args); i ++ {
 		id, _ := strconv.Atoi(args[i])
 		groupIDs = append(groupIDs, int32(id))
 	}
-	masterClient,conn,_ := master.GetMasterRPCClient(client)
-	defer conn.Close()
+
+	/* read registered servers from /node/slave_primary/gid and /node/slave_backup/gid,
+	and save to mappings, for join-group request.
+	*/
 	mappings := make(map[int32]*master.JoinRequest_ServerConfs)
 	for _, gid := range groupIDs{
 		conf := master.JoinRequest_ServerConfs{
@@ -46,6 +50,9 @@ func updateConf(args []string,client *zk_client.SdClient){
 		mappings[gid] = &conf
 	}
 
+	/* connect to master, do Join/Leave Request */
+	masterClient,conn,_ := master.GetMasterRPCClient(client)
+	defer conn.Close()
 	if command == "join-group"{
 		masterClient.Join(context.Background(),  &master.JoinRequest{
 			Mapping: mappings,
@@ -127,7 +134,6 @@ func main() { // start RPC Service and register Service according to cmdline arg
 				defer conn.Close()
 				fmt.Println("	update configuration every period time")
 				for range time.Tick(time.Millisecond * 200){
-					//fmt.Println(".")
 					conf, err := masterClient.Query(context.Background(), &master.QueryRequest{ConfVersion: -1})
 					if err != nil{
 						log.Fatal(err)
@@ -162,7 +168,6 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	primaryPath := "slave_primary/" + strconv.Itoa(groupID)
 	backupPath := "slave_backup/" + strconv.Itoa(groupID)
 	slaveNode := zk_client.ServiceNode{Name: primaryPath, Host: ip, Port: port, Hostname: hostname}
-	//fmt.Printf("slavenode %+v\n", slaveNode)
 	if err := sdClient.TryPrimary(&slaveNode); err != nil {
 		slaveServer.Primary = false
 		if err.Error() != "zk: node already exists" {
@@ -171,13 +176,6 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	} else {
 		/*select as primary node, just return and wait for rpc service to start*/
 		slaveServer.Primary = true
-		/*nodes, err := sdClient.GetNodes(primaryPath)
-		if err != nil {
-			panic(err)
-		}
-		for _, node := range nodes {
-			fmt.Println(node.Host, node.Port, node.Hostname)
-		}*/
 		return
 	}
 	/* all ready exist a primary*/
@@ -185,13 +183,6 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	if err := sdClient.Register(&slaveNode); err != nil {
 		panic(err)
 	}
-	/*
-	nodes, err := sdClient.GetNodes(backupPath)
-	if err != nil {
-		panic(err)
-	}
-	for _, node := range nodes {
-		fmt.Println(node.Host, node.Port, node.Hostname)
-	}*/
+
 
 }

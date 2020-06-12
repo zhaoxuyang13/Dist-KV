@@ -11,16 +11,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/client" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/go/common/Utils/utils.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/client.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go/master/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/common/Utils/utils.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/Utils/utils.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/common/zk_client/zk_client.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/slave/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go/slave_server.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave_server.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/master_server" beforeDir="false" afterPath="$PROJECT_DIR$/master_server" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/slave_server" beforeDir="false" afterPath="$PROJECT_DIR$/slave_server" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" beforeDir="false" afterPath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -68,17 +65,17 @@
     <property name="settings.editor.selected.configurable" value="http.proxy" />
   </component>
   <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+      <recent name="$PROJECT_DIR$/go" />
+      <recent name="$PROJECT_DIR$/go/master" />
+      <recent name="$PROJECT_DIR$/go/utils/consistantHash" />
+    </key>
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/go/master" />
       <recent name="$PROJECT_DIR$/go/slave" />
       <recent name="$PROJECT_DIR$/go/utils/sharding" />
       <recent name="$PROJECT_DIR$/go/utils/zk_client" />
-      <recent name="$PROJECT_DIR$/go/utils/consistantHash" />
-    </key>
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$" />
-      <recent name="$PROJECT_DIR$/go" />
-      <recent name="$PROJECT_DIR$/go/master" />
       <recent name="$PROJECT_DIR$/go/utils/consistantHash" />
     </key>
   </component>
@@ -175,9 +172,10 @@
       <screen x="0" y="0" width="1920" height="1080" />
     </state>
     <state x="556" y="106" width="1630" height="781" key="dock-window-2/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591495321236" />
-    <state x="385" y="196" width="670" height="676" key="search.everywhere.popup" timestamp="1591415600888">
-      <screen x="0" y="0" width="1440" height="900" />
+    <state x="513" y="235" width="894" height="812" key="search.everywhere.popup" timestamp="1591877647014">
+      <screen x="0" y="0" width="1920" height="1080" />
     </state>
     <state x="385" y="196" width="670" height="676" key="search.everywhere.popup/0.0.1440.900@0.0.1440.900" timestamp="1591415600888" />
+    <state x="513" y="235" width="894" height="812" key="search.everywhere.popup/293.1080.1440.900/0.0.1920.1080@0.0.1920.1080" timestamp="1591877647014" />
   </component>
 </project>
