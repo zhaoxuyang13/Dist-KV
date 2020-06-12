@@ -113,7 +113,6 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 			index++
 		}
 	}
-	//fmt.Printf("	shardsTaken %v\n", shardsTaken)
 
 	newConf,_ := latestConf.DeepCopy() // maybe merge latest conf with new conf
 	begin := 0
@@ -131,7 +130,6 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 		for _, shard := range group.Shards { // assign those shards to new group.
 			newConf.Assignment[shard] = group.Gid
 		}
-
 	}
 	/* ask corresponding groups to shift shards. */
 

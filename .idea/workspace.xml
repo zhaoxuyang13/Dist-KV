@@ -11,7 +11,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4a8e7a75-01c0-4dde-8da6-446ae4459bd2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/master/master.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/master/master.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave/slave.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave/slave.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go/slave_server.go" beforeDir="false" afterPath="$PROJECT_DIR$/go/slave_server.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" beforeDir="false" afterPath="$PROJECT_DIR$/test/grpc-go/peer/peer.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

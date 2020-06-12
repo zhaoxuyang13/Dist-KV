@@ -144,20 +144,22 @@ func main() { // start RPC Service and register Service according to cmdline arg
 						// dont do anything, just skip
 					}else {
 						// deep copy
-						slaveServer.GroupInfo.Shards = make([]int, 0)
-						slaveServer.GroupInfo.Servers = make([]string,0)
-						slaveServer.Version = int(conf.Version)
+						shards := make([]int, 0)
+						servers := make([]string,0)
 						if group, exist := conf.Mapping[int32(groupID)]; exist{
 							for _,shard := range group.Shards{
-								slaveServer.GroupInfo.Shards = append(slaveServer.GroupInfo.Shards, int(shard))
+								shards = append(shards, int(shard))
 							}
 							for _,server := range group.Servers{
-								slaveServer.GroupInfo.Servers = append(slaveServer.GroupInfo.Servers, server)
+								servers = append(servers, server)
 							}
 							fmt.Printf("update to: %+v\n",slaveServer)
 						}else {
 							// this group not belongs to confs, not copy configuration,
 						}
+						slaveServer.GroupInfo.Shards = shards
+						slaveServer.GroupInfo.Servers = servers
+						slaveServer.Version = int(conf.Version)
 						/* TODO: remove those shards not used */
 					}
 				}
