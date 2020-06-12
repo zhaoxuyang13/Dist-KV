@@ -1,3 +1,6 @@
 ipads-proxy
 .idea
 .vscode
+master_server
+slave_server
+client

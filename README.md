@@ -19,7 +19,7 @@
 - [ ] Lock library (for slaves data access,necessary?)
 - [ ] Slave backup & primary failed re-election logic
 - [ ] Slave backup & primary normal logic
-
+- [ ] Starting script for slave-master cluster 
 **Features**
 - [ ] multiple backup nodes
 - [ ] backup for master
