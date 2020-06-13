@@ -2,6 +2,7 @@ package zk_client
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/samuel/go-zookeeper/zk"
@@ -163,7 +164,23 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 	}
 	return nodes, nil
 }
+/*
+	get service node under "name", and assert only one result
+*/
+var ErrNotFound = errors.New("not found any node under the path")
+var ErrMultipleNodes = errors.New("found multiple nodes, supposed to be one")
+func (s *SdClient) Get1Node(name string) (*ServiceNode, error){
+	if nodes, err := s.GetNodes(name); err != nil {
+		return nil,err
+	}else if len(nodes) == 0 {
+		return nil, ErrNotFound
+	}else if len(nodes) > 1 {
+		return nil,ErrMultipleNodes
+	}else {
+		return nodes[0],nil
+	}
 
+}
 /* ZkServer information  */
 type ZkServer struct {
 	Ip   string `json:"ip"`

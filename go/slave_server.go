@@ -13,7 +13,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"time"
 )
 
 /* fetch group information from zookeeper cluster,
@@ -99,8 +98,9 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	/* start RPC Service on ip:port */
 	grpcServer := grpc.NewServer()
 	slaveServer := &slave.Slave{
+		ZkClient:      sdClient,
 		LocalStorages: make(map[int]*slave.LocalStorage),
-		Version: 	   0,
+		LocalVersion:  0,
 		GroupInfo: master.Group{
 			Gid:     groupID,
 			Servers: make([]string, 0),
@@ -121,51 +121,7 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	}()
 
 	/* start timer, slave server will retrieve configuration from master every time period*/
-	/* Wrap it up with function in module slave */
-	defer func(){
-
-			masterClient,conn,err := master.GetMasterRPCClient(sdClient)
-			if err !=nil {
-				fmt.Println(err.Error())
-				return
-			}
-			/* start a separate timer, conn should wait until timer end. */
-			go func() {
-				defer conn.Close()
-				fmt.Println("	update configuration every period time")
-				for range time.Tick(time.Millisecond * 200){
-					conf, err := masterClient.Query(context.Background(), &master.QueryRequest{ConfVersion: -1})
-					if err != nil{
-						log.Fatal(err)
-					}
-					if int(conf.Version) < slaveServer.Version {
-						fmt.Println("Error: local version larger than remote version")
-					}else if int(conf.Version) == slaveServer.Version{
-						// dont do anything, just skip
-					}else {
-						// deep copy
-						shards := make([]int, 0)
-						servers := make([]string,0)
-						if group, exist := conf.Mapping[int32(groupID)]; exist{
-							for _,shard := range group.Shards{
-								shards = append(shards, int(shard))
-							}
-							for _,server := range group.Servers{
-								servers = append(servers, server)
-							}
-							fmt.Printf("update to: %+v\n",slaveServer)
-						}else {
-							// this group not belongs to confs, not copy configuration,
-						}
-						slaveServer.GroupInfo.Shards = shards
-						slaveServer.GroupInfo.Servers = servers
-						slaveServer.Version = int(conf.Version)
-						/* TODO: remove those shards not used */
-					}
-				}
-				fmt.Println("should never reach here")
-			}()
-	}()
+	defer slaveServer.UpdateConfEveryPeriod(100)
 
 	primaryPath := "slave_primary/" + strconv.Itoa(groupID)
 	backupPath := "slave_backup/" + strconv.Itoa(groupID)

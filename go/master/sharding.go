@@ -31,6 +31,7 @@ func NewGroup(gid int, servers *JoinRequest_ServerConfs) *Group {
 	return &group
 }
 
+
 /*
 
 

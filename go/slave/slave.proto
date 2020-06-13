@@ -16,9 +16,14 @@ message Response {
 message Empty{
 
 }
+message ShardRequest {
+  map<string,string> storage = 1;
+  int32 shardID = 2;
+}
 
 service KVService {
   rpc Put (Request) returns (Empty);
   rpc Get (Request) returns (Response);
   rpc Del (Request) returns (Empty);
+  rpc TransferShard(ShardRequest) returns (Empty);
 }

@@ -225,20 +225,13 @@ func (m *ShardMaster) Query(ctx context.Context, req *QueryRequest) (*Conf, erro
 	}
 }
 
-
-var ErrMultipleMaster = errors.New("not supposed to see multiple master")
-var ErrGetNodeFailed = errors.New("zookeeper client get node information error")
-
+/* return RPC client of master */
 func GetMasterRPCClient (sdClient *zk_client.SdClient) (ShardingServiceClient,*grpc.ClientConn,error){
 	/* connect to master */
-	if masterNodes,err := sdClient.GetNodes("master"); err != nil{
-		panic(err)
-		return nil,nil,ErrGetNodeFailed
-	}else if len(masterNodes) > 1{
-		panic(masterNodes)
-		return nil,nil,ErrMultipleMaster
+	if masterNode,err := sdClient.Get1Node("master"); err != nil {
+		return nil,nil,err
 	}else {
-		serverString := masterNodes[0].Host + ":" + strconv.Itoa(masterNodes[0].Port)
+		serverString := masterNode.Host + ":" + strconv.Itoa(masterNode.Port)
 		fmt.Println("master server String : " + serverString)
 		conn, err := grpc.Dial(serverString, grpc.WithInsecure())
 		if err != nil {

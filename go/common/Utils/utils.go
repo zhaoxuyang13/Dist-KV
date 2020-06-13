@@ -18,3 +18,35 @@ func Contains(s []int,sid int) bool{
 	}
 	return false
 }
+func Delete(s []int, sid int) []int{
+	for index,entry := range s {
+		if entry == sid {
+			return append(s[:index],s[index+1:]...)
+		}
+	}
+	return s
+}
+/*
+func Delete(slice interface{}, element interface{}) ([]interface{},error){
+	sli := reflect.ValueOf(slice)
+	ele := reflect.ValueOf(element)
+	if sli.Kind() != reflect.Slice {
+		return nil, errors.New("first argument should be a slice")
+	}
+	len := sli.Len()
+	if len < 0 {
+		return nil, errors.New("element not exist")
+	}
+	if sli.Index(0).Kind() != ele.Kind() {
+		return nil, errors.New("slice and element type not match")
+	}
+	for i := 0; i < len; i ++ {
+		if sli.Index(i) == ele {
+			out := make()
+
+			return out, nil
+		}
+	}
+
+	return nil, errors.New("element not exist")
+}*/
