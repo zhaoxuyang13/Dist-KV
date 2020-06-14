@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 )
 
 /* fetch group information from zookeeper cluster,
@@ -99,13 +100,21 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	grpcServer := grpc.NewServer()
 	slaveServer := &slave.Slave{
 		ZkClient:      sdClient,
-		LocalStorages: make(map[int]*slave.LocalStorage),
+		Primary: false,
 		LocalVersion:  0,
+		ShardsLock: new(sync.RWMutex),
 		GroupInfo: master.Group{
 			Gid:     groupID,
 			Servers: make([]string, 0),
 			Shards:  make([]int,0),
 		},
+		ConfLock: new(sync.RWMutex),
+		Conf: master.Configuration{
+			Version: 0,
+		},
+		StorageLock: new(sync.RWMutex),
+		LocalStorages: make(map[int]*slave.LocalStorage),
+
 	}
 	slave.RegisterKVServiceServer(grpcServer, slaveServer)
 	listen, err := net.Listen("tcp", ip+":"+args[1]) // hard configure TCP
@@ -119,9 +128,10 @@ func main() { // start RPC Service and register Service according to cmdline arg
 			log.Fatal(err)
 		}
 	}()
-
+	
 	/* start timer, slave server will retrieve configuration from master every time period*/
 	defer slaveServer.UpdateConfEveryPeriod(100)
+	defer slaveServer.CheckConfEveryPeriod(100)
 
 	primaryPath := "slave_primary/" + strconv.Itoa(groupID)
 	backupPath := "slave_backup/" + strconv.Itoa(groupID)

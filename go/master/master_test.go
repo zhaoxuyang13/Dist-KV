@@ -190,3 +190,71 @@ func TestShardMaster_Join_Leave(t *testing.T) {
 	}
 
 }
+
+func TestShardMaster_Join1234_Leave123(t *testing.T) {
+	assert := assert.New(t)
+	sm := NewShardMaster(20)
+
+	/* assert sm has 20 shards and first config. with all 0*/
+
+	assert.True(sm.ShardNum == 20 && sm.latest == 0)
+	assert.True(len(sm.Confs) == 1)
+	for _, gid := range sm.Confs[0].Assignment {
+		assert.True(gid == 0)
+	}
+
+	var ctx context.Context
+	group1 := JoinRequest{
+		Mapping: map[int32]*JoinRequest_ServerConfs{
+			1: {
+				Names: []string{"1a", "1b", "1c"},
+			},
+		},
+	}
+	group2 := JoinRequest{
+		Mapping: map[int32]*JoinRequest_ServerConfs{
+			2: {
+				Names: []string{"2a", "2b", "2c"},
+			},
+		},
+	}
+	group34 := JoinRequest{
+		Mapping: map[int32]*JoinRequest_ServerConfs{
+			3: {
+				Names: []string{"3a", "3b", "3c"},
+			},
+			4: {
+				Names: []string{"4a", "4b", "4c"},
+			},
+		},
+	}
+
+	gid1 := LeaveRequest{
+		GidList: []int32{1},
+	}
+	gid23 := LeaveRequest{
+		GidList: []int32{2, 3},
+	}
+	/* add group 1*/
+	if _, err := sm.Join(ctx, &group1);err != nil {
+		assert.Fail(err.Error())
+	}
+	/* add group 2*/
+	if _, err := sm.Join(ctx, &group2); err != nil {
+		assert.Fail(err.Error())
+	}
+	/* add group 34*/
+	if _, err := sm.Join(ctx, &group34);err != nil {
+		assert.Fail(err.Error())
+	}
+	/* leave group 1*/
+	if _, err := sm.Leave(ctx, &gid1);err != nil {
+		assert.Fail(err.Error())
+	}
+	/* leave group 2 3 */
+	if _, err := sm.Leave(ctx, &gid23);err != nil {
+		assert.Fail(err.Error())
+	}
+	fmt.Printf("conf : %+v\n %+v\n",sm.Confs[sm.latest],sm.Confs[sm.latest].Groups[4])
+
+}

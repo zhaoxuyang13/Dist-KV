@@ -66,7 +66,7 @@ type Slave struct{
 		// Shards : list of shards this slave will manage ,get from master every 100 milliseconds
 
 	/* Configuration lock, lock when updating group info, RLock when accessing*/
-	ConfLock sync.RWMutex
+	ConfLock *sync.RWMutex
 	/* local copy of the latest configuration got from master */
 	Conf         master.Configuration
 
@@ -79,12 +79,11 @@ type Slave struct{
 }
 
 func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
-	fmt.Println("put")
-
 	shardID := int(args.ShardID)
-
+	fmt.Printf("put %s-%s in shard %d\n", args.Key,args.Value, shardID)
 	s.ShardsLock.RLock()
 	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+		s.ShardsLock.RUnlock()
 		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
 	s.ShardsLock.RUnlock()
@@ -111,11 +110,12 @@ func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
 	return &Empty{}, nil
 }
 func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
-	fmt.Println("get")
 	shardID := int(args.ShardID)
 
+	fmt.Printf("get %s in shard %d\n", args.Key, shardID)
 	s.ShardsLock.RLock()
 	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+		s.ShardsLock.RUnlock()
 		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
 	s.ShardsLock.RUnlock()
@@ -139,11 +139,12 @@ func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
 	}
 }
 func (s *Slave) Del(ctx context.Context, args *Request) (*Empty, error) {
-	fmt.Println("del")
 	shardID := int(args.ShardID)
 
+	fmt.Printf("del %s in shard %d\n", args.Key, shardID)
 	s.ShardsLock.RLock()
 	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+		s.ShardsLock.RUnlock()
 		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
 	s.ShardsLock.RUnlock()
@@ -196,6 +197,7 @@ func (s *Slave) TransferShard(ctx context.Context, req *ShardRequest) (*Empty, e
 
 	shardID := int(req.ShardID)
 
+	fmt.Printf("receive shard %d\n",shardID)
 	localStorage := s.assureStorage(shardID, UNREADY)
 	localStorage.lock.Lock()
 	defer localStorage.lock.Unlock()
@@ -244,6 +246,7 @@ func diffShards(old []int, new[]int) ([]int,[]int){
 }
 func (s* Slave)sendShard(shard int,gid int) error {
 
+	fmt.Printf("send shard %d to gid %d\n",shard,gid)
 	/* get RPC client of primary node */
 	primaryClient,conn, err := GetSlavePrimaryRPCClient(s.ZkClient, gid)
 	if err != nil {
@@ -263,7 +266,7 @@ func (s* Slave)sendShard(shard int,gid int) error {
 
 	if _,err := primaryClient.TransferShard(context.Background(), &ShardRequest{
 		Storage:       storageCopy,
-		ShardID:       int32(gid),
+		ShardID:       int32(shard),
 	});err != nil {
 		fmt.Println(err)
 		return err
@@ -289,17 +292,32 @@ func (s* Slave)acquireShardLock(shard int) *sync.RWMutex{
 func (s *Slave)CheckConfEveryPeriod(milliseconds time.Duration){
 	/* start a separate timer, check configuration every duration
 	for new shard: block all access and  waiting until shard came by RPC
-	for old shard: send to target using RPC, and reject all access.
+	for old shard: reject all access and send to target using RPC
 	*/
-
 	go func() {
 		fmt.Println("	check configuration every period of time")
 		for range time.Tick(time.Millisecond * milliseconds){
 			if s.LocalVersion == s.Conf.Version {
 				continue // if up2date, not check conf
 			}
+			/* server should init the shard if it is first to be assigned
+				When issuing first join, many concurrency shouldn't be allowed
+
+			*/
+			fmt.Printf("new configuration found %+v\n",s.Conf)
+			if s.LocalVersion == 0 && s.Conf.Version == 1{
+				s.ConfLock.RLock()
+				for _,shard := range s.Conf.Groups[s.GroupInfo.Gid].Shards{
+					s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
+					s.assureStorage(shard, READY)
+				}
+				s.LocalVersion = 1
+				s.ConfLock.RUnlock()
+				continue
+			}
+
 			/*deep copy latest conf received*/
-			s.ConfLock.RLock() /* TODO: reason about all these concurrent issues*/
+			s.ConfLock.RLock()
 			var shards []int
 			if group, exist := s.Conf.Groups[s.GroupInfo.Gid]; exist {
 				shards = make([]int,len(group.Shards))
@@ -309,6 +327,7 @@ func (s *Slave)CheckConfEveryPeriod(milliseconds time.Duration){
 				shards = make([]int,0)
 			}
 			version := s.Conf.Version
+			fmt.Printf("old shards, %v, new conf %v, shards %v\n",s.GroupInfo.Shards,s.Conf.Groups[s.GroupInfo.Gid],shards)
 			s.ConfLock.RUnlock()
 			added, removed := diffShards(s.GroupInfo.Shards,shards)
 			if len(added) == 0 && len(removed) == 0 {
@@ -318,16 +337,15 @@ func (s *Slave)CheckConfEveryPeriod(milliseconds time.Duration){
 			/* handling added shard, and removed shard */
 			/* send all shard to it's current machine,just do it concurrently */
 			counter := sync.WaitGroup{}
-
 			counter.Add(len(removed))
+			fmt.Printf("about to send %v  out\n",removed)
 			for _, shard := range removed {
-				go func() {
+				go func(shardID int) {
 					/* invalidate local before sending shard to target */
-
 					wg := sync.WaitGroup{}
 					wg.Add(2)
 					go func() {
-						localStorage := s.acquireStorage(shard)
+						localStorage := s.acquireStorage(shardID)
 						localStorage.lock.Lock()
 						defer localStorage.lock.Unlock()
 						localStorage.state = EXPIRED
@@ -335,7 +353,7 @@ func (s *Slave)CheckConfEveryPeriod(milliseconds time.Duration){
 					}()
 					go func () {
 						s.ShardsLock.Lock()
-						s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shard)
+						s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shardID)
 						s.ShardsLock.Unlock()
 						wg.Done()
 					}()
@@ -343,13 +361,14 @@ func (s *Slave)CheckConfEveryPeriod(milliseconds time.Duration){
 					counter.Done()
 					/* send shard to remote anyway*/
 					s.ConfLock.RLock()
-					gid := s.Conf.Assignment[shard]
+					gid := s.Conf.Assignment[shardID]
 					s.ConfLock.RUnlock()
-					if err := s.sendShard(shard,gid ); err != nil{
+					if err := s.sendShard(shardID,gid ); err != nil{
 						fmt.Println(err.Error())
 					}
-				}()
+				}(shard)
 			}
+			fmt.Printf("about to add %v \n",added)
 			for _,shard := range added{
 				s.assureStorage(shard, UNREADY)
 				s.ShardsLock.Lock()
@@ -357,6 +376,8 @@ func (s *Slave)CheckConfEveryPeriod(milliseconds time.Duration){
 				s.ShardsLock.Unlock()
 			}
 			counter.Wait() // only continue when all the removed shard are invalid
+			fmt.Printf("shard after send and added:  %+v\n", s.GroupInfo.Shards)
+
 			/* TODO: remove those shards not used */
 		}
 	}()
@@ -400,7 +421,6 @@ func GetSlavePrimaryRPCClient (sdClient *zk_client.SdClient,gid int) (KVServiceC
 		return nil,nil,err
 	}else {
 		serverString := primaryNode.Host + ":" + strconv.Itoa(primaryNode.Port)
-		fmt.Println("slave server String : " + serverString)
 		conn, err := grpc.Dial(serverString, grpc.WithInsecure())
 		if err != nil {
 			return nil,nil,err

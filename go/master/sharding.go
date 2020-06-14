@@ -24,9 +24,9 @@ type Group struct {
 /* current only support 2 confs*/
 func NewGroup(gid int, servers *JoinRequest_ServerConfs) *Group {
 	group := Group{
-		Gid:     int(gid),
+		Gid:     gid,
 		Servers: servers.Names,
-		Shards:  make([]int, 10), // TODO: How to deal with this hard-coded number
+		Shards:  make([]int, 0),
 	}
 	return &group
 }
@@ -64,8 +64,16 @@ DeepCopy :
 */
 func (c *Configuration)DeepCopy() (*Configuration,error){
 	groups := make(map[int]Group)
-	for k,v := range c.Groups{
-		groups[k] = v
+	for gid, group := range c.Groups{
+		servers := make([]string,len(group.Servers))
+		shards := make([]int,len(group.Shards))
+		copy(servers,group.Servers)
+		copy(shards,group.Shards)
+		groups[gid] = Group{
+			Gid:     group.Gid,
+			Servers: servers,
+			Shards:  shards,
+		}
 	}
 	assignment := make(map[int]int)
 	for k,v := range c.Assignment {
@@ -116,7 +124,7 @@ NewConf helper function , convert Conf to Configuration
 */
 func NewConf(conf *Conf) *Configuration {
 	mapping := make(map[int]Group)
-	convIntSlice := func(v []int32) []int {
+	toIntSlice := func(v []int32) []int {
 		vm := make([]int, len(v))
 		for i, val := range v {
 			vm[i] = int(val)
@@ -124,12 +132,14 @@ func NewConf(conf *Conf) *Configuration {
 		return vm
 	}
 	for gid, group := range conf.Mapping {
-		confGroup := Group{
+		servers := make([]string, len(group.Servers))
+		copy(servers,group.Servers)
+
+		mapping[int(gid)] = Group{
 			Gid:     int(gid),
-			Servers: group.Servers,
-			Shards:  convIntSlice(group.Shards),
+			Servers: servers,
+			Shards:  toIntSlice(group.Shards),
 		}
-		mapping[confGroup.Gid] = confGroup
 	}
 	assignment := make(map[int]int)
 	for sid, gid := range conf.Assignment {
