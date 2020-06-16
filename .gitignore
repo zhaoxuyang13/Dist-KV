@@ -5,3 +5,4 @@ master_server
 slave_server
 client
 test
+logs/

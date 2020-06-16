@@ -1,4 +1,0 @@
-127.0.0.1 4100 master
-master serving at ip:port 127.0.0.1:4100
-receive a Join RPC, map[1:names:"slave1-2"  names:"slave1-1"]
-	new split [20]

@@ -62,25 +62,32 @@ func updateConf(args []string,client *zk_client.SdClient){
 	}
 }
 
-
-func main() { // start RPC Service and register Service according to cmdline arguments
-
+func startZkFromFile(filename string) (*zk_client.SdClient,error){
 	/* read configuration from json file, and start connection with zookeeper cluster */
-	content, err := ioutil.ReadFile("./configuration.json")
+	content, err := ioutil.ReadFile(filename)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	var conf zk_client.Conf
 	err = json.Unmarshal(content, &conf)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return nil, err
 	}
 	sdClient, err := zk_client.NewClient(conf.ServersString(), "/node", 10)
 	if err != nil {
 		panic(err)
 	}
-	defer sdClient.Close()
+	return sdClient,nil
+}
 
+func main() { // start RPC Service and register Service according to cmdline arguments
+
+	sdClient,err := startZkFromFile("./configuration.json");
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer sdClient.Close()
 	/* read cmdline arguments and load configuration file*/
 	args := os.Args[1:] // args without program name, determine Ip:Port hostname of this slave.
 	if args[0] == "join-group" || args[0] == "leave-group" { // if only 2 args provided, treat it as a configuration change
