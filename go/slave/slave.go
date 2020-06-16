@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
+	"net"
 	"strconv"
 	"sync"
 	"time"
@@ -78,6 +79,25 @@ type Slave struct{
 
 }
 
+func CreateSlave(client *zk_client.SdClient, gid int) *Slave{
+	return &Slave{
+		ZkClient:      client,
+		Primary: false,
+		LocalVersion:  0,
+		ShardsLock: new(sync.RWMutex),
+		GroupInfo: master.Group{
+			Gid:     gid,
+			Servers: make([]string, 0),
+			Shards:  make([]int,0),
+		},
+		ConfLock: new(sync.RWMutex),
+		Conf: master.Configuration{
+			Version: 0,
+		},
+		StorageLock: new(sync.RWMutex),
+		LocalStorages: make(map[int]*LocalStorage),
+	}
+}
 func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
 	shardID := int(args.ShardID)
 	fmt.Printf("put %s-%s in shard %d\n", args.Key,args.Value, shardID)
@@ -427,4 +447,51 @@ func GetSlavePrimaryRPCClient (sdClient *zk_client.SdClient,gid int) (KVServiceC
 		}
 		return NewKVServiceClient(conn),conn,nil
 	}
+}
+
+/*
+StartService : start KV service at ip:port as hostname
+wrapper function for slave server to run*/
+func (s *Slave) StartService(ip string, port int,hostname string) {
+
+	/* start RPC Service on ip:port */
+	slaveServer := CreateSlave(s.ZkClient, s.GroupInfo.Gid)
+
+	grpcServer := grpc.NewServer()
+	RegisterKVServiceServer(grpcServer, slaveServer)
+	listen, err := net.Listen("tcp", ip +":"+strconv.Itoa(port)) // hard configure TCP
+	if err != nil {
+		log.Fatal(err)
+	}
+	/* defer execute in LIFO, close connection at last*/
+	defer func() {
+		fmt.Println("slave server start serving requests at " + ip + ":" + strconv.Itoa(port))
+		if err := grpcServer.Serve(listen); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	/* start timer, slave server will retrieve configuration from master every time period*/
+	defer slaveServer.UpdateConfEveryPeriod(100)
+	defer slaveServer.CheckConfEveryPeriod(100)
+
+	primaryPath := "slave_primary/" + strconv.Itoa(s.GroupInfo.Gid)
+	backupPath := "slave_backup/" + strconv.Itoa(s.GroupInfo.Gid)
+	slaveNode := zk_client.ServiceNode{Name: primaryPath, Host: ip, Port: port, Hostname: hostname}
+	if err := s.ZkClient.TryPrimary(&slaveNode); err != nil {
+		slaveServer.Primary = false
+		if err.Error() != "zk: node already exists" {
+			panic(err)
+		}
+	} else {
+		/*select as primary node, just return and wait for rpc service to start*/
+		slaveServer.Primary = true
+		return
+	}
+	/* all ready exist a primary*/
+	slaveNode = zk_client.ServiceNode{Name: backupPath, Host: ip, Port: port, Hostname: hostname}
+	if err := s.ZkClient.Register(&slaveNode); err != nil {
+		panic(err)
+	}
+
 }
