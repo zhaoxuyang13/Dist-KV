@@ -20,10 +20,17 @@ message ShardRequest {
   map<string,string> storage = 1;
   int32 shardID = 2;
 }
+message SyncRequest{
+  string key = 1;
+  string value = 2;
+  int32 shardID = 3;
+  int32 reqCode = 4;
+}
 
 service KVService {
   rpc Put (Request) returns (Empty);
   rpc Get (Request) returns (Response);
   rpc Del (Request) returns (Empty);
   rpc TransferShard(ShardRequest) returns (Empty);
+  rpc Sync(SyncRequest) returns (Empty);
 }
