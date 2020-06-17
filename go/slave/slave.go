@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"log"
+	//"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -141,16 +141,17 @@ func (s *Slave) put(key string , value string , shardID int ) (*Empty,error){
 	}
 	localStorage.storage[key] = value
 
-	if err := s.forwardRequest(&SyncRequest{
-		Key:           key,
-		Value:         value,
-		ShardID:       int32(shardID),
-		ReqCode:       PutReq,
-	}); err != nil {
-		log.Printf("forwarding error\n")
-		return nil,ErrNotPrimary //TODO: this is wrong error code
+	if s.Primary {
+		if err := s.forwardRequest(&SyncRequest{
+			Key:     key,
+			Value:   value,
+			ShardID: int32(shardID),
+			ReqCode: PutReq,
+		}); err != nil {
+			log.Printf("forwarding error\n")
+			return nil, ErrNotPrimary //TODO: this is wrong error code
+		}
 	}
-
 	/* release lock for the key, done by defer*/
 	return &Empty{}, nil
 }
@@ -223,14 +224,15 @@ func (s *Slave) del(key string, shardID int) (*Empty, error) {
 			delete(localStorage.storage, key)
 		}
 	}
-
-	if err := s.forwardRequest(&SyncRequest{
-		Key:           key,
-		ShardID:       int32(shardID),
-		ReqCode:       DelReq,
-	}); err != nil {
-		log.Printf("forwarding error\n")
-		return nil,ErrNotPrimary //TODO: this is wrong error code
+	if s.Primary{
+		if err := s.forwardRequest(&SyncRequest{
+			Key:           key,
+			ShardID:       int32(shardID),
+			ReqCode:       DelReq,
+		}); err != nil {
+			log.Printf("forwarding error\n")
+			return nil,ErrNotPrimary //TODO: this is wrong error code
+		}
 	}
 
 	return &Empty{}, nil
@@ -325,17 +327,24 @@ func (s *Slave) TransferShard(ctx context.Context, req *ShardRequest) (*Empty, e
 	}
 	localStorage.state = READY
 	localStorage.cond.Broadcast()
-	//s.GroupInfo.Shards = append(s.GroupInfo.Shards, shardID)
-	//switch s.LocalStorages[shardID].state {
-	//case WAITING :
-	//	s.LocalStorages[shardID].state = NORMAL
-	//	s.ShardLocks[shardID].Unlock()
-	//case UNREADY : fallthrough
-	//case EXPIRED :
-	//	s.LocalStorages[shardID].state = PENDING
-	//default:
-	//	log.Fatal("not possible")
-	//}
+
+	if s.Primary{
+		s.backupConfLock.RLock()
+		defer s.backupConfLock.RUnlock()
+		wg := sync.WaitGroup{}
+		wg.Add(len(s.backupServers))
+		for _,backup := range s.backupServers {
+			go func(backup KVClient) {
+				log.Printf("forward transfer shard to %v\n",backup.hostname)
+				if _, err := backup.serviceClient.TransferShard(context.Background(), req); err != nil {
+					log.Printf(err.Error())
+				}
+				wg.Done()
+			}(backup)
+		}
+		wg.Wait()
+	}
+
 	return &Empty{}, nil
 }
 
@@ -382,7 +391,7 @@ func (s *Slave) sendShard(shard int, gid int) error {
 		storageCopy[k] = v
 	}
 	localstorage.lock.RUnlock()
-
+	/* backup only start receiving sync request on this shard, after primary start*/
 	if _, err := primaryClient.TransferShard(context.Background(), &ShardRequest{
 		Storage: storageCopy,
 		ShardID: int32(shard),
@@ -415,7 +424,6 @@ func (s *Slave) CheckConfEveryPeriod(milliseconds time.Duration) {
 			}
 			/* server should init the shard if it is first to be assigned
 			When issuing first join, many concurrency shouldn't be allowed
-
 			*/
 			log.Printf("new configuration found %+v\n", s.Conf)
 			if s.LocalVersion == 0 && s.Conf.Version == 1 {
@@ -452,34 +460,36 @@ func (s *Slave) CheckConfEveryPeriod(milliseconds time.Duration) {
 			counter := sync.WaitGroup{}
 			counter.Add(len(removed))
 			log.Printf("about to send %v  out\n", removed)
-			for _, shard := range removed {
-				go func(shardID int) {
-					/* invalidate local before sending shard to target */
-					wg := sync.WaitGroup{}
-					wg.Add(2)
-					go func() {
-						localStorage := s.acquireStorage(shardID)
-						localStorage.lock.Lock()
-						defer localStorage.lock.Unlock()
-						localStorage.state = EXPIRED
-						wg.Done()
-					}()
-					go func() {
-						s.ShardsLock.Lock()
-						s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shardID)
-						s.ShardsLock.Unlock()
-						wg.Done()
-					}()
-					wg.Wait()
-					counter.Done()
-					/* send shard to remote anyway*/
-					s.ConfLock.RLock()
-					gid := s.Conf.Assignment[shardID]
-					s.ConfLock.RUnlock()
-					if err := s.sendShard(shardID, gid); err != nil {
-						log.Println(err.Error())
-					}
-				}(shard)
+			if s.Primary {
+				for _, shard := range removed {
+					go func(shardID int) {
+						/* invalidate local before sending shard to target */
+						wg := sync.WaitGroup{}
+						wg.Add(2)
+						go func() {
+							localStorage := s.acquireStorage(shardID)
+							localStorage.lock.Lock()
+							defer localStorage.lock.Unlock()
+							localStorage.state = EXPIRED
+							wg.Done()
+						}()
+						go func() {
+							s.ShardsLock.Lock()
+							s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shardID)
+							s.ShardsLock.Unlock()
+							wg.Done()
+						}()
+						wg.Wait()
+						counter.Done()
+						/* send shard to remote anyway*/
+						s.ConfLock.RLock()
+						gid := s.Conf.Assignment[shardID]
+						s.ConfLock.RUnlock()
+						if err := s.sendShard(shardID, gid); err != nil {
+							log.Println(err.Error())
+						}
+					}(shard)
+				}
 			}
 			log.Printf("about to add %v \n", added)
 			for _, shard := range added {
@@ -495,7 +505,7 @@ func (s *Slave) CheckConfEveryPeriod(milliseconds time.Duration) {
 		}
 	}()
 }
-func (s *Slave) UpdateConfEveryPeriod(milliseconds time.Duration) {
+func (s *Slave) UpdateConfEveryPeriod(milliseconds time.Duration)  {
 
 	masterClient, conn, err := master.GetMasterRPCClient(s.ZkClient)
 	if err != nil {
