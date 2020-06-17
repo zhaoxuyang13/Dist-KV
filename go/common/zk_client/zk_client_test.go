@@ -17,13 +17,13 @@ func Test_ZkClient(t *testing.T) {
 	node1 := &ServiceNode{"user", "127.0.0.1", 4000,"slave1"}
 	node2 := &ServiceNode{"user", "127.0.0.1", 4001,"slave2"}
 	node3 := &ServiceNode{"user", "127.0.0.1", 4002,"slave3"}
-	if err := client.Register(node1); err != nil {
+	if _,err := client.Register(node1); err != nil {
 		t.Errorf("register failed")
 	}
-	if err := client.Register(node2); err != nil {
+	if _,err := client.Register(node2); err != nil {
 		t.Errorf("register failed")
 	}
-	if err := client.Register(node3); err != nil {
+	if _,err := client.Register(node3); err != nil {
 		t.Errorf("register failed")
 	}
 	nodes, err := client.GetNodes("user")

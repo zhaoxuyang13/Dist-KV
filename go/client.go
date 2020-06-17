@@ -51,6 +51,9 @@ func printInvalidCmd(text string) {
 var ErrInvalidConf = errors.New("problematic configuration file")
 var MaxRetry = 3
 func (c *UserClient) Key2Server(key string) (string,int, error) {
+	if c.conf.Version == 0 {
+		return "",0,ErrInvalidConf
+	}
 	shardID := Utils.Key2shard(key, c.conf.ShardNum)
 	gid, exist := c.conf.Assignment[shardID]
 	if !exist {
@@ -81,15 +84,20 @@ func (c *UserClient) Put(args []string) {
 			fmt.Printf("put success: \"%s\" = \"%s\" \n",key,value)
 			return
 		}else {
-			errStatus, _ := status.FromError(err)
-			try ++
-			switch errStatus.Code() {
-			case codes.Unavailable: fallthrough
-			case codes.PermissionDenied: // TODO : not primary case
+			if err == ErrInvalidConf{
 				c.updateConf()
-			default:
-				fmt.Println("unhandled err: " + err.Error())
+			}else {
+				errStatus, _ := status.FromError(err)
+				try++
+				switch errStatus.Code() {
+				case codes.Unavailable:
+					fallthrough
+				case codes.PermissionDenied: // TODO : not primary case
+					c.updateConf()
+				default:
+					fmt.Println("unhandled err: " + err.Error())
 
+				}
 			}
 		}
 	}
@@ -101,7 +109,7 @@ func (c *UserClient) SimplePut(args []string) error {
 	value := args[1]
 	print("put " + key + " - " + value + "\n")
 	if targetServer, shardID, err := c.Key2Server(args[0]); err != nil {
-		panic(err)
+		return err
 	} else {
 		if conn, err := grpc.Dial(targetServer, grpc.WithInsecure()); err != nil {
 			fmt.Println("client: grpc dialing failed, error: " + err.Error())

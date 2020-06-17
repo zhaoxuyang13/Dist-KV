@@ -84,21 +84,21 @@ func (s *SdClient) ensureRoot() error {
 
 // 接下来我们编写服务注册方法
 /* client register a service, protected temporal sequential add */
-func (s *SdClient) Register(node *ServiceNode) error {
+func (s *SdClient) Register(node *ServiceNode) (string,error) {
 	if err := s.ensureName(node.Name); err != nil {
-		return err
+		return "",err
 	}
 	path := s.zkRoot + "/" + node.Name + "/n"
 	data, err := json.Marshal(node)
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = s.conn.CreateProtectedEphemeralSequential(path, data, zk.WorldACL(zk.PermAll))
+	newPath, err := s.conn.CreateProtectedEphemeralSequential(path, data, zk.WorldACL(zk.PermAll))
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return newPath,nil
 }
 
 func (s *SdClient) TryPrimary(node *ServiceNode)error {
@@ -169,14 +169,24 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 	}
 	return nodes, nil
 }
-/**/
-func (s *SdClient) SubscribeNode(name string) (chan []*ServiceNode, error){
+/*
+SubscribeNodes : return a channel that emit a []*ServiceNode whenever the children under "name"path change
+*/
+func (s *SdClient) SubscribeNodes(name string,done chan struct{}) (chan []*ServiceNode, error){
 	path := s.zkRoot + "/" + name
 	// 获取字节点名称
 	nodesChan := make(chan []*ServiceNode)
 	go func() {
-		defer close(nodesChan)
 		for {
+			select {
+			case _,ok := <- done:
+				if !ok {
+					log.Printf("done send, stop subscribing channel of %s\n", name)
+					close(nodesChan)
+					return
+				}
+			default:
+			}
 			childs, _,ch, err := s.conn.ChildrenW(path)
 			if err != nil {
 				fmt.Println(err.Error())
@@ -191,12 +201,12 @@ func (s *SdClient) SubscribeNode(name string) (chan []*ServiceNode, error){
 					if err == zk.ErrNoNode {
 						continue
 					}
-					fmt.Println(err.Error())
+					log.Println(err.Error())
 				}
 				node := new(ServiceNode)
 				err = json.Unmarshal(data, node)
 				if err != nil {
-					fmt.Println(err.Error())
+					log.Println(err.Error())
 				}
 				nodes = append(nodes, node)
 			}
@@ -209,9 +219,74 @@ func (s *SdClient) SubscribeNode(name string) (chan []*ServiceNode, error){
 			}else {
 				log.Printf("zk Path: %s, unexpected events\n",name)
 			}
+
 		}
 	}()
 	return nodesChan, nil
+}
+/*
+Subscribe1Node :
+Watch the status of one node, and return a channel
+channel will close if the node no longer exist
+*/
+func (s *SdClient) Subscribe1Node(name string) (chan ServiceNode, error){
+	resChan := make(chan ServiceNode)
+	done := make(chan struct{})
+	nodeChan, _ := s.SubscribeNodes(name,done)
+
+	go func() {
+		for nodes := range nodeChan {
+			if len(nodes) == 0 {
+			close(resChan)
+			close(done)
+			}else if len(nodes) != 1{
+				log.Printf("not suppose to see multiple primary nodes")
+			}else {
+				resChan <- *nodes[0]
+			}
+		}
+	}()
+	return resChan,nil
+}
+//func (s *SdClient)GetStat(name string, hostname string) error
+/*
+Delete Node: delete node with hostname under the path name
+*/
+func (s *SdClient)DeleteNode(path string) error {
+
+
+	//path := s.zkRoot + "/" + name
+	//// 获取字节点名称
+	//childs, _, err := s.conn.Children(path)
+	//log.Printf("hostname %s, get children %+v\n",hostname, childs)
+	//if err != nil {
+	//	return err
+	//}
+	//for _, child := range childs {
+	//	fullPath := path + "/" + child
+	//	data, stat, err := s.conn.Get(fullPath)
+	//	if err != nil {
+	//		if err == zk.ErrNoNode {
+	//			continue
+	//		}
+	//		return err
+	//	}
+	//	node := new(ServiceNode)
+	//	err = json.Unmarshal(data, node)
+	//	log.Printf("path %s, node info %+v,stat %+v\n",fullPath,*node,stat)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	if node.Hostname == hostname{
+	//		log.Printf("delete emit\n")
+	//		s.conn.Delete(name, 0)
+	//		return nil
+	//	}
+	//}
+	if err := s.conn.Delete(path,0); err != nil {
+		return err
+	}
+	return nil
 }
 /*
 	get service node under "name", and assert only one result

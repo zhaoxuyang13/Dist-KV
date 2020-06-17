@@ -102,7 +102,7 @@ func main() { // start RPC Service and register Service according to cmdline arg
 	groupID, err := strconv.Atoi(args[3])
 
 	/* start RPC Service on ip:port */
-	slaveServer := slave.CreateSlave(sdClient, groupID)
+	slaveServer := slave.CreateSlave(sdClient, groupID,hostname,ip,port)
 	slaveServer.StartService(ip, port, hostname)
 
 }

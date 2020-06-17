@@ -7,10 +7,11 @@ import (
 	"ds/go/common/zk_client"
 	"ds/go/master"
 	"errors"
-	"log"
+	"github.com/samuel/go-zookeeper/zk"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"log"
 	//"fmt"
 	"net"
 	"strconv"
@@ -61,36 +62,47 @@ type Slave struct {
 
 	/* Am I primary node ?*/
 	Primary bool
-
+	/*hostname,ip,port of current slave */
+	ip string
+	port int
+	hostname string
+	path string
 	backupConfLock *sync.RWMutex
 	/* link to all back up servers of this cluster */
 	backupServers []KVClient
 	/* the version number storage updated to */
 	LocalVersion int
 
-	/* lock for groupInfo.shards structure, acquire when modifying or reading*/
+	/*
+	ShardsLock : lock for groupInfo.shards(what shards current group serves),
+	acquire when modifying or reading*/
 	ShardsLock *sync.RWMutex
 	GroupInfo  master.Group
 	// Gid 	  : the group id this slave belongs to, used to check configuration
 	// Shards : list of shards this slave will manage ,get from master every 100 milliseconds
 
-	///* Configuration lock, lock when updating group info, RLock when accessing*/
-	//ConfLock *sync.RWMutex
-	///* local copy of the latest configuration got from master */
-	//Conf master.Configuration
-
-	/* lock for shardID -> *localstorage map */
+	/*
+	StorageLock: lock for shardID -> *localstorage map
+	lock for individual Local Shard Storage is in LocalStorage Structure.
+	*/
 	StorageLock   *sync.RWMutex
 	LocalStorages map[int]*LocalStorage // map from ShardID to LocalStorages
 
-	SyncReqs chan SyncRequest // channel for requests from primary for processing
+	/*
+	SyncReqs: channel for requests from primary for processing
+	*/
+	SyncReqs chan SyncRequest
 }
 
 const SyncReqChanLength = 100
-func CreateSlave(client *zk_client.SdClient, gid int) *Slave {
+func CreateSlave(client *zk_client.SdClient, gid int,hostname string,ip string, port int) *Slave {
 	return &Slave{
 		ZkClient:     client,
 		Primary:      false,
+		ip: ip,
+		port: port,
+		hostname: hostname,
+		path : "",
 		backupConfLock: new(sync.RWMutex),
 		backupServers: make([]KVClient,0),
 		LocalVersion: 0,
@@ -106,7 +118,8 @@ func CreateSlave(client *zk_client.SdClient, gid int) *Slave {
 		//},
 		StorageLock:   new(sync.RWMutex),
 		LocalStorages: make(map[int]*LocalStorage),
-		SyncReqs: make(chan SyncRequest, SyncReqChanLength),
+		//SyncReqs: make(chan SyncRequest, SyncReqChanLength),
+		SyncReqs: nil, // will only be init before registered as a backup,  if the node fail to be the primary
 	}
 }
 /*
@@ -541,6 +554,96 @@ func (s *Slave)getSlavePrimaryRPCClient(gid int) (KVServiceClient, *grpc.ClientC
 	}
 }
 /*
+*/
+func (s* Slave) processBackupConfs(serverChan chan []*zk_client.ServiceNode){
+	/* iterate until channel closed */
+	for backups := range serverChan {
+		backupServersNew := make([]KVClient,0)
+		/* check for new servers and start connection */
+		findServer := func (s []KVClient, e string) int {
+			for index, a := range s {
+				if a.hostname == e {
+					return index
+				}
+			}
+			return -1
+		}
+		for _,backup := range backups {
+			index := findServer(s.backupServers, backup.Hostname)
+			if index == -1 {
+				serverString := backup.ServerString()
+				conn, err := grpc.Dial(serverString, grpc.WithInsecure())
+				if err != nil {
+					log.Printf("grpc dial error:" + err.Error())
+				} else {
+					backupServersNew = append(backupServersNew, KVClient{
+						serviceClient: NewKVServiceClient(conn),
+						hostname:      backup.Hostname,
+						conn:          conn,
+					})
+				}
+			}else {
+				backupServersNew = append(backupServersNew, s.backupServers[index])
+			}
+		}
+		s.backupConfLock.Lock()
+		s.backupServers = backupServersNew
+		s.backupConfLock.Unlock()
+		log.Printf("updated backup server %v\n",backupServersNew)
+	}
+}
+func (s *Slave) ElectThenWork(){
+
+	primaryPath := "slave_primary/" + strconv.Itoa(s.GroupInfo.Gid)
+	backupPath := "slave_backup/" + strconv.Itoa(s.GroupInfo.Gid)
+	slaveNode := zk_client.ServiceNode{Name: primaryPath, Host: s.ip, Port: s.port, Hostname: s.hostname}
+	if err := s.ZkClient.TryPrimary(&slaveNode); err != nil {
+		if err != zk.ErrNodeExists {
+			log.Printf(err.Error())
+			panic(err)
+		}
+		s.Primary = false
+		/* create sync chan before register */
+		s.SyncReqs = make(chan SyncRequest,SyncReqChanLength)
+
+		/* already exist a primary*/
+		slaveNode = zk_client.ServiceNode{Name: backupPath, Host: s.ip, Port: s.port, Hostname: s.hostname}
+		if path,err := s.ZkClient.Register(&slaveNode); err != nil {
+			panic(err)
+		}else {
+			s.path = path
+		}
+		log.Printf("I'm one of backup nodes of group %d\n",s.GroupInfo.Gid)
+		nodeChan, _ := s.ZkClient.Subscribe1Node(primaryPath)
+		go s.WatchPrimary(nodeChan)
+		go s.ProcessSyncRequests()
+	} else {
+		/*select as primary node, just return and wait for rpc service to start*/
+		s.Primary = true
+		log.Printf("I'm the primary node of group %d\n",s.GroupInfo.Gid)
+		/* primary should connect to back up servers */
+		serverChan, _ := s.ZkClient.SubscribeNodes(backupPath, make(chan struct{})) // pass in a non-closing channel
+		go s.processBackupConfs(serverChan)
+	}
+}
+/*
+WatchPrimary : Watching the primary and ready to take over
+*/
+func (s *Slave) WatchPrimary(nodeChan chan zk_client.ServiceNode) {
+	for node := range nodeChan {
+		log.Printf("current primary Node of this group is %+v\n",node)
+	}
+	log.Printf("primary node seems to die\n")
+	/* primary node seems to be offline, re-election ! */
+	close(s.SyncReqs)
+	s.SyncReqs = nil
+	//s.ZkClient.DeleteNode("slave_backup/" + strconv.Itoa(s.GroupInfo.Gid), s.hostname)
+	s.ZkClient.DeleteNode(s.path)
+	log.Printf("backup node deleted, path %s\n", s.path)
+
+	s.ElectThenWork()
+}
+/*
 StartService : start KV service at ip:port as hostname
 wrapper function for slave server to run*/
 func (s *Slave) StartService(ip string, port int, hostname string) {
@@ -563,63 +666,7 @@ func (s *Slave) StartService(ip string, port int, hostname string) {
 
 	/* start timer, slave server will retrieve configuration from master every time period*/
 	defer s.UpdateConfEveryPeriod(100)
-
-	primaryPath := "slave_primary/" + strconv.Itoa(s.GroupInfo.Gid)
-	backupPath := "slave_backup/" + strconv.Itoa(s.GroupInfo.Gid)
-	slaveNode := zk_client.ServiceNode{Name: primaryPath, Host: ip, Port: port, Hostname: hostname}
-	if err := s.ZkClient.TryPrimary(&slaveNode); err != nil {
-		s.Primary = false
-		if err.Error() != "zk: node already exists" {
-			panic(err)
-		}
-	} else {
-		/*select as primary node, just return and wait for rpc service to start*/
-		s.Primary = true
-		/* primary should connect to back up servers */
-		serverChan, _ := s.ZkClient.SubscribeNode(backupPath)
-		go func() {
-			/* iterate until channel closed */
-			for backups := range serverChan {
-				backupServersNew := make([]KVClient,0)
-				/* check for new servers and start connection */
-				findServer := func (s []KVClient, e string) int {
-					for index, a := range s {
-						if a.hostname == e {
-							return index
-						}
-					}
-					return -1
-				}
-				for _,backup := range backups {
-					index := findServer(s.backupServers, backup.Hostname)
-					if index == -1 {
-						serverString := backup.ServerString()
-						conn, err := grpc.Dial(serverString, grpc.WithInsecure())
-						if err != nil {
-							log.Printf("grpc dial error:" + err.Error())
-						} else {
-							backupServersNew = append(backupServersNew, KVClient{
-								serviceClient: NewKVServiceClient(conn),
-								hostname:      backup.Hostname,
-								conn:          conn,
-							})
-						}
-					}else {
-						backupServersNew = append(backupServersNew, s.backupServers[index])
-					}
-				}
-				s.backupConfLock.Lock()
-				s.backupServers = backupServersNew
-				s.backupConfLock.Unlock()
-				log.Printf("updated backup server %v\n",backupServersNew)
-			}
-		}()
-		return
-	}
-	/* all ready exist a primary*/
-	slaveNode = zk_client.ServiceNode{Name: backupPath, Host: ip, Port: port, Hostname: hostname}
-	if err := s.ZkClient.Register(&slaveNode); err != nil {
-		panic(err)
-	}
-	go s.ProcessSyncRequests()
+	/* primary election, and work as the role*/
+	s.ElectThenWork()
 }
+

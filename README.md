@@ -18,12 +18,12 @@
 - [ ] Master/Slave/Client - handling network error, filter out duplicate RPCs
 - [ ] Lock library (for slaves data access,necessary?)
 - [ ] Slave backup & primary failed re-election logic
-- [ ] Slave backup & primary normal logic
+- [x] Slave backup & primary normal logic
 - [x] Starting script for slave-master cluster 
 
 
 **Features**
-- [ ] multiple backup nodes
+- [x] multiple backup nodes
 - [ ] backup for master
 
 ### Build & Run
