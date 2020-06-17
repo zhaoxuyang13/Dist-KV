@@ -74,10 +74,10 @@ type Slave struct {
 	// Gid 	  : the group id this slave belongs to, used to check configuration
 	// Shards : list of shards this slave will manage ,get from master every 100 milliseconds
 
-	/* Configuration lock, lock when updating group info, RLock when accessing*/
-	ConfLock *sync.RWMutex
-	/* local copy of the latest configuration got from master */
-	Conf master.Configuration
+	///* Configuration lock, lock when updating group info, RLock when accessing*/
+	//ConfLock *sync.RWMutex
+	///* local copy of the latest configuration got from master */
+	//Conf master.Configuration
 
 	/* lock for shardID -> *localstorage map */
 	StorageLock   *sync.RWMutex
@@ -100,10 +100,10 @@ func CreateSlave(client *zk_client.SdClient, gid int) *Slave {
 			Servers: make([]string, 0),
 			Shards:  make([]int, 0),
 		},
-		ConfLock: new(sync.RWMutex),
-		Conf: master.Configuration{
-			Version: 0,
-		},
+		//ConfLock: new(sync.RWMutex),
+		//Conf: master.Configuration{
+		//	Version: 0,
+		//},
 		StorageLock:   new(sync.RWMutex),
 		LocalStorages: make(map[int]*LocalStorage),
 		SyncReqs: make(chan SyncRequest, SyncReqChanLength),
@@ -411,129 +411,119 @@ func (s *Slave) sendShard(shard int, gid int) error {
 	- removed: （排除本地访问该组）设置成invalid，并RPC到远端。RPC会改state为ready
 	- not changed : up-to-date = true
 */
-func (s *Slave) CheckConfEveryPeriod(milliseconds time.Duration) {
-	/* start a separate timer, check configuration every duration
-	for new shard: block all access and  waiting until shard came by RPC
-	for old shard: reject all access and send to target using RPC
-	*/
-	go func() {
-		log.Println("	check configuration every period of time")
-		for range time.Tick(time.Millisecond * milliseconds) {
-			if s.LocalVersion == s.Conf.Version {
-				continue // if up2date, not check conf
+func (s *Slave) ProcessNewConf(confChan chan master.Configuration) {
+	for conf := range confChan{
+		log.Printf("processing conf Version %d\n",conf.Version)
+		if s.LocalVersion == conf.Version {
+			continue // if up2date, not check conf
+		}
+		/* server should init the shard if it is first to be assigned
+		When issuing first join, many concurrency shouldn't be allowed
+		*/
+		log.Printf("new configuration found %+v\n", conf)
+		if s.LocalVersion == 0 && conf.Version == 1 {
+			for _, shard := range conf.Groups[s.GroupInfo.Gid].Shards {
+				s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
+				s.assureStorage(shard, READY)
 			}
-			/* server should init the shard if it is first to be assigned
-			When issuing first join, many concurrency shouldn't be allowed
-			*/
-			log.Printf("new configuration found %+v\n", s.Conf)
-			if s.LocalVersion == 0 && s.Conf.Version == 1 {
-				s.ConfLock.RLock()
-				for _, shard := range s.Conf.Groups[s.GroupInfo.Gid].Shards {
-					s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
-					s.assureStorage(shard, READY)
-				}
-				s.LocalVersion = 1
-				s.ConfLock.RUnlock()
-				continue
-			}
-
-			/*deep copy latest conf received*/
-			s.ConfLock.RLock()
-			var shards []int
-			if group, exist := s.Conf.Groups[s.GroupInfo.Gid]; exist {
-				shards = make([]int, len(group.Shards))
-				copy(shards, group.Shards)
-			} else {
-				// this group not belongs to confs, not copy configuration,
-				shards = make([]int, 0)
-			}
-			version := s.Conf.Version
-			log.Printf("old shards, %v, new conf %v, shards %v\n", s.GroupInfo.Shards, s.Conf.Groups[s.GroupInfo.Gid], shards)
-			s.ConfLock.RUnlock()
-			added, removed := diffShards(s.GroupInfo.Shards, shards)
-			if len(added) == 0 && len(removed) == 0 {
-				s.LocalVersion = version
-				continue
-			}
-			/* handling added shard, and removed shard */
+			s.LocalVersion = 1
+			continue
+		}
+		/*deep copy latest conf received*/
+		var shards []int
+		if group, exist := conf.Groups[s.GroupInfo.Gid]; exist {
+			shards = make([]int, len(group.Shards))
+			copy(shards, group.Shards)
+		} else {
+			// this group not belongs to confs, not copy configuration,
+			shards = make([]int, 0)
+		}
+		version := conf.Version
+		log.Printf("old shards, %v, new conf %v, new shards %v\n", s.GroupInfo.Shards, conf.Groups[s.GroupInfo.Gid], shards)
+		added, removed := diffShards(s.GroupInfo.Shards, shards)
+		if len(added) == 0 && len(removed) == 0 {
+			s.LocalVersion = version
+			continue
+		}
+		/* handling added shard, and removed shard */
+		if s.Primary {
 			/* send all shard to it's current machine,just do it concurrently */
 			counter := sync.WaitGroup{}
 			counter.Add(len(removed))
 			log.Printf("about to send %v  out\n", removed)
-			if s.Primary {
-				for _, shard := range removed {
-					go func(shardID int) {
-						/* invalidate local before sending shard to target */
-						wg := sync.WaitGroup{}
-						wg.Add(2)
-						go func() {
-							localStorage := s.acquireStorage(shardID)
-							localStorage.lock.Lock()
-							defer localStorage.lock.Unlock()
-							localStorage.state = EXPIRED
-							wg.Done()
-						}()
-						go func() {
-							s.ShardsLock.Lock()
-							s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shardID)
-							s.ShardsLock.Unlock()
-							wg.Done()
-						}()
-						wg.Wait()
-						counter.Done()
-						/* send shard to remote anyway*/
-						s.ConfLock.RLock()
-						gid := s.Conf.Assignment[shardID]
-						s.ConfLock.RUnlock()
-						if err := s.sendShard(shardID, gid); err != nil {
-							log.Println(err.Error())
-						}
-					}(shard)
-				}
-			}
-			log.Printf("about to add %v \n", added)
-			for _, shard := range added {
-				s.assureStorage(shard, UNREADY)
-				s.ShardsLock.Lock()
-				s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
-				s.ShardsLock.Unlock()
+			for _, shard := range removed {
+				go func(shardID int) {
+					/* invalidate local before sending shard to target */
+					wg := sync.WaitGroup{}
+					wg.Add(2)
+					go func() {
+						localStorage := s.acquireStorage(shardID)
+						localStorage.lock.Lock()
+						defer localStorage.lock.Unlock()
+						localStorage.state = EXPIRED
+						wg.Done()
+					}()
+					go func() {
+						s.ShardsLock.Lock()
+						s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shardID)
+						s.ShardsLock.Unlock()
+						wg.Done()
+					}()
+					wg.Wait()
+					counter.Done()
+					/* send shard to remote anyway*/
+					gid := conf.Assignment[shardID]
+					if err := s.sendShard(shardID, gid); err != nil {
+						log.Println(err.Error())
+					}
+				}(shard)
 			}
 			counter.Wait() // only continue when all the removed shard are invalid
-			log.Printf("shard after send and added:  %+v\n", s.GroupInfo.Shards)
-
-			/* TODO: remove those shards not used */
 		}
-	}()
+		log.Printf("about to add %v \n", added)
+		for _, shard := range added {
+			s.assureStorage(shard, UNREADY)
+			s.ShardsLock.Lock()
+			s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
+			s.ShardsLock.Unlock()
+		}
+		log.Printf("shard after send and added:  %+v\n", s.GroupInfo.Shards)
+
+		/* TODO: remove those shards not used */
+	}
 }
-func (s *Slave) UpdateConfEveryPeriod(milliseconds time.Duration)  {
+func (s *Slave) UpdateConfEveryPeriod(milliseconds time.Duration) {
 
 	masterClient, conn, err := master.GetMasterRPCClient(s.ZkClient)
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
+	confChan := make(chan master.Configuration)
 	/* start a separate timer, conn should wait until timer end. */
 	go func() {
 		defer conn.Close()
 		log.Println("	update configuration every period of time")
+		currentVersion := 0
 		for range time.Tick(time.Millisecond * milliseconds) {
 			conf, err := masterClient.Query(context.Background(), &master.QueryRequest{ConfVersion: -1})
 			if err != nil {
 				log.Fatal(err)
 			}
-			if int(conf.Version) < s.Conf.Version {
+			if int(conf.Version) < currentVersion {
 				log.Println("Error: local conf version larger than remote version")
-			} else if int(conf.Version) == s.Conf.Version {
+			} else if int(conf.Version) == currentVersion {
 				// dont do anything, just skip
 			} else {
 				// deep copy
-				s.ConfLock.Lock()
-				s.Conf = *master.NewConf(conf)
-				s.ConfLock.Unlock()
+				log.Printf("received new Conf %d\n",conf.Version)
+				currentVersion = int(conf.Version)
+				confChan <- *master.NewConf(conf)
 			}
 		}
 		log.Println("should never reach here")
 	}()
+	go s.ProcessNewConf(confChan)
 }
 
 /* return RPC client of primary slave of group gid */
@@ -573,7 +563,6 @@ func (s *Slave) StartService(ip string, port int, hostname string) {
 
 	/* start timer, slave server will retrieve configuration from master every time period*/
 	defer s.UpdateConfEveryPeriod(100)
-	defer s.CheckConfEveryPeriod(100)
 
 	primaryPath := "slave_primary/" + strconv.Itoa(s.GroupInfo.Gid)
 	backupPath := "slave_backup/" + strconv.Itoa(s.GroupInfo.Gid)
