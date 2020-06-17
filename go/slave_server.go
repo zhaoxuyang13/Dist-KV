@@ -32,10 +32,11 @@ func updateConf(args []string, client *zk_client.SdClient) {
 		conf := master.JoinRequest_ServerConfs{
 			Names: make([]string, 0),
 		}
-		if primaries, err := client.GetNodes("slave_primary/" + strconv.Itoa(int(gid))); err != nil || len(primaries) != 1 {
+		
+		if primary, err := client.Get1Node("slave_primary/" + strconv.Itoa(int(gid))); err != nil  {
 			fmt.Println("get primary node error :" + err.Error())
 		} else {
-			conf.Names = append(conf.Names, primaries[0].Hostname)
+			conf.Names = append(conf.Names, primary.Hostname)
 		}
 		if backups, err := client.GetNodes("slave_backup/" + args[1]); err != nil {
 			fmt.Println("get primary node error :" + err.Error())

@@ -3,6 +3,9 @@ package zk_client
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
+	"strconv"
 	"time"
 
 	"github.com/samuel/go-zookeeper/zk"
@@ -15,7 +18,9 @@ type ServiceNode struct {
 	Port     int    `json:"port"`
 	Hostname string `json:"hostname"` // hostname of this service, not exactly like hostname
 }
-
+func (s *ServiceNode) ServerString() string {
+	return s.Host + ":" + strconv.Itoa(s.Port)
+}
 // 在定义一个服务发现的客户端结构体SdClient。
 /* client information,
 a client connect to a list of servers.
@@ -163,6 +168,50 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 		nodes = append(nodes, node)
 	}
 	return nodes, nil
+}
+/**/
+func (s *SdClient) SubscribeNode(name string) (chan []*ServiceNode, error){
+	path := s.zkRoot + "/" + name
+	// 获取字节点名称
+	nodesChan := make(chan []*ServiceNode)
+	go func() {
+		defer close(nodesChan)
+		for {
+			childs, _,ch, err := s.conn.ChildrenW(path)
+			if err != nil {
+				fmt.Println(err.Error())
+				log.Fatal(err)
+				return
+			}
+			var nodes []*ServiceNode
+			for _, child := range childs {
+				fullPath := path + "/" + child
+				data, _, err := s.conn.Get(fullPath)
+				if err != nil {
+					if err == zk.ErrNoNode {
+						continue
+					}
+					fmt.Println(err.Error())
+				}
+				node := new(ServiceNode)
+				err = json.Unmarshal(data, node)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				nodes = append(nodes, node)
+			}
+			/* send new nodes to chan */
+			nodesChan <- nodes
+			/* when receiving events*/
+			e := <- ch
+			if e.Type == zk.EventNodeChildrenChanged {
+				log.Printf("zk Path: %s, children changed\n", name)
+			}else {
+				log.Printf("zk Path: %s, unexpected events\n",name)
+			}
+		}
+	}()
+	return nodesChan, nil
 }
 /*
 	get service node under "name", and assert only one result
