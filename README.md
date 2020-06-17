@@ -14,10 +14,10 @@
 - [x] Client - Put,Del,Get, CMDLINE-Interface, RPC call (after master done)
 - [x] Client - Del,Get Value not exist, Gracefully handle other failures, Update configuration when key-not-belong 
 - [x] Master/Slave/Client - On configuration change, how to shift shards.
-- [ ] Copy test from 6.824
+- [ ] Copy test from 6.824 / or write on my own
 - [ ] Master/Slave/Client - handling network error, filter out duplicate RPCs
 - [ ] Lock library (for slaves data access,necessary?)
-- [ ] Slave backup & primary failed re-election logic
+- [x] Slave backup & primary failed re-election logic
 - [x] Slave backup & primary normal logic
 - [x] Starting script for slave-master cluster 
 
