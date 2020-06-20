@@ -17,14 +17,14 @@ func TestShardMaster_Simple_Join_Leave(t *testing.T) {
 	})
 
 	mapping1 := map[int][]string{
-		1: []string{"1-1","1-2","1-3"},
+		1: {"1-1", "1-2", "1-3"},
 	}
 	mapping2 := map[int][]string{
-		2: []string{"2-1","2-2","2-3"},
+		2: {"2-1", "2-2", "2-3"},
 	}
 	mapping34 := map[int][]string{
-		3: []string{"3-1","3-2","3-3"},
-		4: []string{"4-1","4-2","4-3"},
+		3: {"3-1", "3-2", "3-3"},
+		4: {"4-1", "4-2", "4-3"},
 	}
 	if err := shardMaster.Join(mapping1); err != nil {
 		assert.Fail(err.Error())

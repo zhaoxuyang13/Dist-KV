@@ -266,14 +266,13 @@ func (c *UserClient) updateConf() (bool, error) {
 		return false, err
 	}
 	defer masterClient.Close()
-	fmt.Println("updating conf...")
+	fmt.Printf("updating conf... current conf %+v\n", c.conf)
 	if conf, err := masterClient.Query(-1); err != nil {
 		log.Fatal(err)
 		return false, err
 	} else if conf.Version < c.conf.Version {
+		log.Printf("invalid version num %+v\n", conf)
 		return false, ErrInvalidVersion
-	} else if conf.Version == c.conf.Version {
-		return false, nil
 	} else {
 		c.conf = *conf
 		if err := c.getPrimaries(); err != nil {

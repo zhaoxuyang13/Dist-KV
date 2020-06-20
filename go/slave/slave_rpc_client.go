@@ -38,48 +38,52 @@ func (c *RPCClient)Close() error {
 /*
 Put : RPC call to Put a key value
 */
-func (c *RPCClient) Put(key string, value string, shardID int) (*Empty, error) {
-	return c.client.Put(context.Background(), &Request{
+func (c *RPCClient) Put(key string, value string, shardID int) error {
+	_,err := c.client.Put(context.Background(), &Request{
 		ShardID: int32(shardID),
 		Key:     key,
 		Value:   value,
 	})
+	return err
 }
 /*
 Get : RPC call to Get a key */
-func (c *RPCClient) Get(key string, shardID int) (*Response, error) {
-
-	return c.client.Get(context.Background(),&Request{
+func (c *RPCClient) Get(key string, shardID int) (string, error) {
+	res, err := c.client.Get(context.Background(),&Request{
 		ShardID: int32(shardID),
 		Key:     key,
 	})
+	return res.Value,err
 }
 /*
 Del: RPC call to delete a key
 */
-func (c *RPCClient) Del(key string, shardID int) (*Empty, error) {
-	return c.client.Del(context.Background(),&Request{
+func (c *RPCClient) Del(key string, shardID int)  error {
+	_, err := c.client.Del(context.Background(),&Request{
 		ShardID: int32(shardID),
 		Key:     key,
 	})
+	return  err
 }
 /*
 SyncRequest
 */
-func (c*RPCClient)Sync(req request)(*Empty, error) {
-	return c.client.Sync(context.Background(),&SyncRequest{
+func (c*RPCClient)Sync(req request) error {
+	_,err := c.client.Sync(context.Background(),&SyncRequest{
 		Key:     req.Key,
 		Value:   req.Value,
 		ShardID: int32(req.ShardID),
 		ReqCode: int32(req.ReqCode),
 	})
+	return err
 }
 /*
 RPC call to Transfer a Shard to here
 */
-func (c *RPCClient) TransferShard(shardID int, storage map[string]string) (*Empty, error) {
-	return c.client.TransferShard(context.Background(),&ShardRequest{
+func (c *RPCClient) TransferShard(shardID int, storage map[string]string)  error {
+	_,err := c.client.TransferShard(context.Background(),&ShardRequest{
 		Storage: storage,
 		ShardID: int32(shardID),
 	})
+	return err
 }

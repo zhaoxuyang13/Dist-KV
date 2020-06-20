@@ -64,3 +64,9 @@ $ go run go/admin.go [command] [groupIDs ...]
 # command = "join-group" / "leave-group"
 # groupIDs is an array of groupid to be configured
 ```
+
+
+---
+- Strange cases 
+
+    - when primary failed and become backup again. client's request should fail.

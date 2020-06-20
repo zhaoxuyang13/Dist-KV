@@ -1,6 +1,5 @@
 package slave
 
-//noinspection ALL
 import (
 	"ds/go/common/Utils"
 	"ds/go/common/zk_client"
@@ -51,6 +50,7 @@ func (s *Server) Serve() {
 
 func (s *Server) ElectThenWork(){
 
+	log.Printf("try to be the primary node %+v\n",s.primaryNode())
 	if err := s.zkClient.TryPrimary(s.primaryNode()); err != nil {
 		if err != zk.ErrNodeExists {
 			log.Printf(err.Error())
@@ -90,7 +90,9 @@ func (s *Server) WatchPrimary(nodeChan chan zk_client.ServiceNode) {
 	close(s.slave.syncReqs)
 	s.slave.syncReqs = nil
 	//s.ZkClient.DeleteNode("slave_backup/" + strconv.Itoa(s.GroupInfo.Gid), s.hostname)
-	s.zkClient.DeleteNode(s.path)
+	if err := s.zkClient.DeleteNode(s.path); err != nil {
+		log.Println("delete node err ", err)
+	}
 	log.Printf("backup node deleted, path %s\n", s.path)
 
 	s.ElectThenWork()
@@ -112,7 +114,7 @@ func (s *Server) getConfEveryPeriod(milliseconds time.Duration) chan master.Conf
 			Hostname: masterNode.Hostname,
 		})
 		if err != nil {
-			log.Println(err.Error())
+			panic(err.Error())
 		}
 
 		defer masterClient.Close()
@@ -246,7 +248,7 @@ func (s *Server) sendShard(shard int, gid int) error {
 	localstorage := s.slave.acquireStorage(shard)
 	storageCopy := localstorage.copyStorageAtomic()
 	/* backup only start receiving sync request on this shard, after primary start*/
-	if _, err := primaryClient.TransferShard(shard, storageCopy); err != nil {
+	if err := primaryClient.TransferShard(shard, storageCopy); err != nil {
 		log.Println(err)
 		return err
 	}
@@ -267,8 +269,29 @@ func (s *Server)getSlavePrimaryRPCClient(gid int) (*RPCClient, error) {
 		})
 	}
 }
-/*
-*/
+func (s *Server) transferAllShardsToServer(backupClient *RPCClient) error{
+
+	s.slave.storageLock.RLock()
+	defer s.slave.storageLock.RUnlock()
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(s.slave.localStorages))
+	for shardID,storage := range s.slave.localStorages{
+		shardID := shardID
+		storage := storage
+		go func() {
+			storage.lock.RLock()
+			defer storage.lock.RUnlock()
+			if err := backupClient.TransferShard(shardID,storage.storage); err != nil {
+				log.Println(err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	return nil
+}
+
 func (s* Server) processBackupConfs(serverChan chan []*zk_client.ServiceNode){
 	/* iterate until channel closed */
 	for backups := range serverChan {
@@ -292,6 +315,11 @@ func (s* Server) processBackupConfs(serverChan chan []*zk_client.ServiceNode){
 				}); err != nil {
 					log.Printf("create rpc client to %s,  error:" + err.Error(), backup.ServerString())
 				} else {
+
+					if err := s.transferAllShardsToServer(server); err != nil {
+						log.Println(err)
+					}
+
 					backupServersNew = append(backupServersNew,server)
 				}
 			}else {

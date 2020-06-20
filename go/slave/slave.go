@@ -3,25 +3,21 @@ package slave
 //noinspection ALL
 import (
 	"ds/go/common/Utils"
-	"errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
-
 	"strconv"
 	"sync"
 )
 
 var (
 	/* when request is for gid not belong to this group*/
-
-	ErrWrongGroup = errors.New("key not managed by this group")
+	ErrWrongGroup = status.Errorf(codes.Unavailable, "key not managed by this group")
 	/* when slave is backup and request is not from primary*/
-	ErrNotPrimary = errors.New("don't send request to a back up server")
+	ErrNotPrimary = status.Errorf(codes.PermissionDenied,"don't send request to a back up server")
 	/* for Del and Get operation, key is managed by this group, but not in the storage */
-	ErrNotFound = errors.New("key not exist on this machine's storage")
+	ErrNotFound = status.Errorf(codes.NotFound, "key not exist on this machine's storage")
 )
-
 
 type StorageState int
 
@@ -110,12 +106,12 @@ func NewSlave(conf ServerConf) *Slave {
 func (s *Slave)ServerString() string {
 	return s.conf.ServerString()
 }
-func (s *Slave) Put(key string , value string , shardID int ) (*Empty,error) {
+func (s *Slave) Put(key string , value string , shardID int ) error {
 	log.Printf("Put %s-%s in shard %d\n", key, value, shardID)
 	s.ShardsLock.RLock()
-	if Utils.Contains(s.shards, shardID) == false {
+	if Utils.ContainsInt(s.shards, shardID) == false {
 		s.ShardsLock.RUnlock()
-		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
+		return ErrWrongGroup
 	}
 	s.ShardsLock.RUnlock()
 
@@ -139,22 +135,21 @@ func (s *Slave) Put(key string , value string , shardID int ) (*Empty,error) {
 			Key:     key,
 			Value:   value,
 			ShardID: shardID,
-			ReqCode: DelReq,
+			ReqCode: PutReq,
 		}); err != nil {
 			log.Printf("forwarding error\n")
-			return nil, ErrNotPrimary //TODO: this is wrong error code
+			return ErrNotPrimary //TODO: this is wrong error code
 		}
 	}
-	/* release lock for the key, done by defer*/
-	return &Empty{}, nil
+	return nil
 }
 
-func (s *Slave) Get(key string , shardID int)  (*Response,error) {
+func (s *Slave) Get(key string , shardID int)  (string,error) {
 	log.Printf("Get %s in shard %d\n", key, shardID)
 	s.ShardsLock.RLock()
-	if Utils.Contains(s.shards, shardID) == false {
+	if Utils.ContainsInt(s.shards, shardID) == false {
 		s.ShardsLock.RUnlock()
-		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
+		return "",ErrWrongGroup
 	}
 	s.ShardsLock.RUnlock()
 
@@ -162,28 +157,26 @@ func (s *Slave) Get(key string , shardID int)  (*Response,error) {
 	s.storageLock.RLock()
 	defer s.storageLock.RUnlock()
 	if localStorage, ok := s.localStorages[shardID]; !ok {
-		return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+		return "",ErrNotFound
 	} else {
 		/* acquire r lock when read storage */
 		localStorage.lock.RLock()
 		defer localStorage.lock.RUnlock()
 		if res, ok := localStorage.storage[key]; !ok {
-			return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+			return "",ErrNotFound
 		} else {
-			return &Response{
-				Value: res,
-			}, nil
+			return res,nil
 		}
 	}
 }
 
-func (s *Slave) Del(key string, shardID int) (*Empty, error) {
+func (s *Slave) Del(key string, shardID int) error {
 
 	log.Printf("Del %s in shard %d\n", key, shardID)
 	s.ShardsLock.RLock()
-	if Utils.Contains(s.shards, shardID) == false {
+	if Utils.ContainsInt(s.shards, shardID) == false {
 		s.ShardsLock.RUnlock()
-		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
+		return ErrWrongGroup
 	}
 	s.ShardsLock.RUnlock()
 
@@ -192,13 +185,13 @@ func (s *Slave) Del(key string, shardID int) (*Empty, error) {
 	defer s.storageLock.RUnlock()
 	if localStorage, ok := s.localStorages[shardID]; !ok {
 		/* localStorage not exist */
-		return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+		return ErrNotFound
 	} else {
 		localStorage.lock.Lock()
 		defer localStorage.lock.Unlock()
 		if _, ok = localStorage.storage[key]; !ok {
 			/* storage entry not exist*/
-			return nil, status.Errorf(codes.NotFound, ErrNotFound.Error())
+			return ErrNotFound
 		} else {
 			delete(localStorage.storage, key)
 		}
@@ -210,11 +203,11 @@ func (s *Slave) Del(key string, shardID int) (*Empty, error) {
 			ReqCode: DelReq,
 		}); err != nil {
 			log.Printf("forwarding error\n")
-			return nil,ErrNotPrimary //TODO: this is wrong error code
+			return ErrNotPrimary //TODO: this is wrong error code
 		}
 	}
 
-	return &Empty{}, nil
+	return nil
 	/*release lock for the key, done by defer*/
 }
 const (
@@ -231,10 +224,10 @@ type request struct {
 /*
 SyncRequest
 */
-func (s* Slave)Sync(req request)(*Empty, error) {
+func (s* Slave)Sync(req request) error {
 	/* no need to acquire lock when sync because primary already has lock */
 	s.syncReqs <- req
-	return &Empty{},nil
+	return nil
 }
 func (s *Slave)forwardRequest(req request) error {
 	s.backupConfLock.RLock()
@@ -246,7 +239,7 @@ func (s *Slave)forwardRequest(req request) error {
 		backup := backup
 		go func() {
 			log.Printf("forward request to %v\n",backup.hostname)
-			if _, err := backup.Sync(req); err != nil {
+			if err := backup.Sync(req); err != nil {
 				log.Printf(err.Error())
 			}
 			wg.Done()
@@ -262,12 +255,14 @@ func (s *Slave)ProcessSyncRequests(){
 		log.Printf("receive request:  %+v\n",req)
 		switch req.ReqCode { // todo: fault handling, backup conf may be lagged behind
 		case PutReq:
-			if _,err := s.Put(req.Key,req.Value,shardID); err != nil {
+			if err := s.Put(req.Key,req.Value,shardID); err != nil {
 				log.Printf(err.Error())
+				panic(err)
 			}
 		case DelReq:
-			if _,err :=s.Del(req.Key,shardID); err != nil {
+			if err :=s.Del(req.Key,shardID); err != nil {
 				log.Printf(err.Error())
+				panic(err)
 			}
 		}
 	}
@@ -302,8 +297,7 @@ func (s *Slave) acquireStorage(shard int) *LocalStorage {
 /*
 RPC call to Transfer a Shard to here
 */
-func (s *Slave) TransferShard(shardID int,storage map[string]string) (*Empty, error) {
-
+func (s *Slave) TransferShard(shardID int,storage map[string]string) error {
 
 	log.Printf("receive shard %d\n", shardID)
 	localStorage := s.assureStorage(shardID, UNREADY)
@@ -325,8 +319,8 @@ func (s *Slave) TransferShard(shardID int,storage map[string]string) (*Empty, er
 			// localize backup, or the backup variable will always be the last one in the iteration
 			backup := backup
 			go func() {
-				log.Printf("forward transfer shard to %v\n",backup.hostname)
-				if _, err := backup.TransferShard(shardID,storage); err != nil {
+				log.Printf("forward shard %d to %v\n",shardID,backup.hostname)
+				if  err := backup.TransferShard(shardID,storage); err != nil {
 					log.Printf(err.Error())
 				}
 				wg.Done()
@@ -334,8 +328,8 @@ func (s *Slave) TransferShard(shardID int,storage map[string]string) (*Empty, er
 		}
 		wg.Wait()
 	}
-
-	return &Empty{}, nil
+	log.Printf("	shard loaded %+v\n", s.localStorages[shardID])
+	return nil
 }
 
 /*

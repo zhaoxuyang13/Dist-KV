@@ -4,5 +4,7 @@ ipads-proxy
 master_server
 slave_server
 client
+admin
+
 test
 logs/

@@ -190,6 +190,11 @@ SubscribeNodes : return a channel that emit a []*ServiceNode whenever the childr
 */
 func (s *Client) SubscribeNodes(name string,done chan struct{}) (chan []*ServiceNode, error){
 	path := s.zkRoot + "/" + name
+	err := s.ensureName(name)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+	}
 	// 获取字节点名称
 	nodesChan := make(chan []*ServiceNode)
 	go func() {
@@ -206,7 +211,7 @@ func (s *Client) SubscribeNodes(name string,done chan struct{}) (chan []*Service
 			childs, _,ch, err := s.conn.ChildrenW(path)
 			if err != nil {
 				fmt.Println(err.Error())
-				log.Fatal(err)
+				panic(err)
 				return
 			}
 			var nodes []*ServiceNode
