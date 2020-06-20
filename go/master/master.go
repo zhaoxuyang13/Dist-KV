@@ -1,51 +1,57 @@
 package master
 
 import (
-	"context"
-	"ds/go/common/zk_client"
 	"errors"
 	"fmt"
-	"google.golang.org/grpc"
-	"log"
 	"strconv"
 	"sync"
 )
 
-/*
-ShardMaster : RPC Interface of a ShardMaster
-*/
-type ShardMaster struct {
-	confLock sync.RWMutex // big lock for configuration modification.
-	latest   int        // latest version number
-	ShardNum int        // total number of shards to be split across slave groups
-	Confs    []*Configuration
-}
 
-/*
-NewShardMaster : creat the ShardMaster with numbers of shard
-*/
-func NewShardMaster(shardNum int) *ShardMaster {
+type ShardMaster struct {
+	latest        int        // latest version number
+
+	ip       string
+	port     int
+	shardNum int
+	hostname string
+
+	shardConfLock sync.RWMutex // big lock for configuration modification.
+	ShardConfs    []*Configuration
+}
+type ServerConf struct {
+	IP       string
+	Port     int
+	ShardNum int
+	Hostname string
+}
+func NewShardMaster(conf ServerConf) *ShardMaster {
 	sm := ShardMaster{
-		ShardNum: shardNum,
-		latest:   0,
-		confLock: sync.RWMutex{},
-		Confs:    make([]*Configuration, 1),
+		ip :           conf.IP,
+		port :         conf.Port,
+		shardNum:      conf.ShardNum,
+		hostname:      conf.Hostname,
+		latest:        0,
+		shardConfLock: sync.RWMutex{},
+		ShardConfs:    make([]*Configuration, 1),
 	}
 
 	firstConf := Configuration{
 		Version:    0,
-		ShardNum: shardNum,
-		Groups:     make(map[int]Group),
+		ShardNum:   conf.ShardNum,
+		Id2Groups:  make(map[int]Group),
 		Assignment: make(map[int]int),
 	}
-	/* init with first configuration map all shards to GID 0, which is not valid */
-	for i := 0; i < shardNum; i++ {
+	/* initial configuration map all shards to group 0, which is not valid */
+	for i := 0; i < conf.ShardNum; i++ {
 		firstConf.Assignment[i] = 0
 	}
-	sm.Confs[0] = &firstConf
+	sm.ShardConfs[0] = &firstConf
 	return &sm
 }
-
+func (m *ShardMaster)ServerString() string{
+	return m.ip + ":" + strconv.Itoa(m.port);
+}
 /* split work load for groups in circumstance of
 M shards, N groups
 return how many shards each group will have
@@ -65,7 +71,7 @@ func splitWork(M int, N int) []int {
 }
 func (m *ShardMaster) splitWork(N int) []int {
 	if N != 0 {
-		return splitWork(m.ShardNum, N)
+		return splitWork(m.shardNum, N)
 	}else {
 		return nil
 	}
@@ -75,22 +81,21 @@ func (m *ShardMaster) splitWork(N int) []int {
 /*
 Join : join several new groups to shardMaster, and re-balance
 */
-func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error) {
-	fmt.Printf("receive a Join RPC, %v\n", req.Mapping)
+func (m *ShardMaster) Join(newGroups map[int][]string) error {
 
 	/* get the lock before make modification, TODO: may change this to optimistic lock */
-	m.confLock.Lock()
-	defer m.confLock.Unlock()
+	m.shardConfLock.Lock()
+	defer m.shardConfLock.Unlock()
 
-	lastConf := m.Confs[m.latest] // maybe merge latest conf with new conf
+	lastConf := m.ShardConfs[m.latest] // maybe merge latest conf with new conf
 	newConf,_ := lastConf.DeepCopy()
 	if newConf.Version != m.latest {
 		panic("no way")
 	}
 
 	/* determine how many shards each group will have after */
-	oldGroupNum := len(lastConf.Groups)
-	newGroupNum := oldGroupNum + len(req.Mapping)
+	oldGroupNum := len(lastConf.Id2Groups)
+	newGroupNum := oldGroupNum + len(newGroups)
 	newSplit := m.splitWork(newGroupNum)
 	fmt.Printf("	new split %v\n", newSplit)
 
@@ -98,11 +103,11 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 	shardsTaken := make([]int, 0)
 	index := 0
 	if oldGroupNum == 0 { /* start from empty, then all shards are available */
-		for i := 0; i < m.ShardNum; i++ {
+		for i := 0; i < m.shardNum; i++ {
 			shardsTaken = append(shardsTaken, i)
 		}
 	} else { /* collect from old groups, if they are allocated less shards, just take first some from them */
-		for gid, group := range lastConf.Groups {
+		for gid, group := range lastConf.Id2Groups {
 			oldLen := len(group.Shards)
 			if newSplit[index] < oldLen {
 				// take first oldLen-newSplit[index]
@@ -110,7 +115,7 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 				shardsTaken = append(shardsTaken, group.Shards[0:oldLen-newSplit[index]]...)
 
 				group.Shards = group.Shards[oldLen-newSplit[index]:]
-				newConf.Groups[gid] = group
+				newConf.Id2Groups[gid] = group
 			}
 			index++
 		}
@@ -119,16 +124,16 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 
 	begin := 0
 	/*  re-balance to others  */
-	for gid, serverConfs := range req.Mapping {
-		group := NewGroup(int(gid), serverConfs)
+	for gid, serverConfs := range newGroups {
+		group := NewGroup(gid, serverConfs)
 		group.Shards = append(group.Shards, shardsTaken[begin : begin+newSplit[index]]...)
 		begin += newSplit[index]
 		index++
-		/* add new group to Groups if gid not collide.*/
-		if _, exist := newConf.Groups[group.Gid]; exist {
-			return nil, errors.New("gid already exist:" + strconv.Itoa(int(gid)) + " \n")
+		/* add new group to Id2Groups if gid not collide.*/
+		if _, exist := newConf.Id2Groups[group.Gid]; exist {
+			return errors.New("gid already exist:" + strconv.Itoa(int(gid)) + " \n")
 		}
-		newConf.Groups[group.Gid] = *group
+		newConf.Id2Groups[group.Gid] = *group
 		for _, shard := range group.Shards { // assign those shards to new group.
 			newConf.Assignment[shard] = group.Gid
 		}
@@ -136,55 +141,54 @@ func (m *ShardMaster) Join(ctx context.Context, req *JoinRequest) (*Empty, error
 	/* update the change back to ShardMaster*/
 	m.latest ++
 	newConf.Version = m.latest
-	m.Confs = append(m.Confs, newConf)
+	m.ShardConfs = append(m.ShardConfs, newConf)
 
-	return &Empty{}, nil
+	return nil
 }
 
 /*
 Leave : leave several old groups from shardMaster, and re-balance
 */
-func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, error) {
-	fmt.Printf("receive a Leave RPC, %v\n", req.GidList)
+func (m *ShardMaster) Leave(groupIDs []int) error {
 
 	/* get the lock before make modification, TODO: may change this to optimistic lock */
-	m.confLock.Lock()
-	defer m.confLock.Unlock()
+	m.shardConfLock.Lock()
+	defer m.shardConfLock.Unlock()
 
-	lastConf := m.Confs[m.latest] // maybe merge latest conf with new conf
+	lastConf := m.ShardConfs[m.latest] // maybe merge latest conf with new conf
 	newConf,_ := lastConf.DeepCopy()
 	if newConf.Version != m.latest {
 		panic("no way")
 	}
 
 	/* determine how many shards each group will have after */
-	oldGroupNum := len(lastConf.Groups)
-	newGroupNum := oldGroupNum - len(req.GidList)
+	oldGroupNum := len(lastConf.Id2Groups)
+	newGroupNum := oldGroupNum - len(groupIDs)
 	if newGroupNum == 0 {
-		return nil, errors.New("leave will remove all the groups from shardmaster, denying request")
+		return errors.New("leave will remove all the groups from shardmaster, denying request")
 	}
 	newSplit := m.splitWork(newGroupNum)
 	//fmt.Printf("	newSplit %v\n", newSplit)
 
 	/* shards taken from some and  re-balance to others */
 	shardsTaken := make([]int, 0)
-	for _, gid := range req.GidList {
-		if group, ok := newConf.Groups[int(gid)]; ok{
+	for _, gid := range groupIDs {
+		if group, ok := newConf.Id2Groups[gid]; ok{
 			shardsTaken = append(shardsTaken,group.Shards...)
-			delete(newConf.Groups, int(gid))
+			delete(newConf.Id2Groups, gid)
 		} else {
-			return nil, errors.New("the gid " + strconv.Itoa(int(gid)) + " in leave list does not exist")
+			return errors.New("the gid " + strconv.Itoa(int(gid)) + " in leave list does not exist")
 		}
 	}
 	begin := 0
 	index := 0
-	for gid, group := range newConf.Groups { /* only groups left wil be iterated */
+	for gid, group := range newConf.Id2Groups { /* only groups left wil be iterated */
 		oldLen := len(group.Shards)
 		delta := newSplit[index] - oldLen
 		if delta > 0 {
 			group.Shards =
 				append(group.Shards, shardsTaken[begin:begin + delta]...)
-			newConf.Groups[gid] = group
+			newConf.Id2Groups[gid] = group
 
 			for _, shardID := range shardsTaken[begin : begin + delta] {
 				newConf.Assignment[shardID] = gid
@@ -198,43 +202,27 @@ func (m *ShardMaster) Leave(ctx context.Context, req *LeaveRequest) (*Empty, err
 	/* update the change back to ShardMaster*/
 	m.latest++
 	newConf.Version = m.latest
-	m.Confs = append(m.Confs, newConf)
+	m.ShardConfs = append(m.ShardConfs, newConf)
 
 	/*unlock(done by defer)*/
 
-	return &Empty{}, nil
+	return nil
 }
 
 /*
-Query : Query for configuration giving a version
+Query : Query for configuration of version (-1 means latest)
 */
-func (m *ShardMaster) Query(ctx context.Context, req *QueryRequest) (*Conf, error) {
+func (m *ShardMaster) Query(version int) (*Configuration, error) {
 	//fmt.Printf("receive a Query RPC, %v\n", req.ConfVersion)
-	m.confLock.RLock()
-	defer m.confLock.RUnlock()
+	m.shardConfLock.RLock()
+	defer m.shardConfLock.RUnlock()
 
-	if req.ConfVersion == -1 { /*asking for latest configuration*/
-		return m.Confs[m.latest].ToConf()
-	} else if req.ConfVersion >= 0 && int(req.ConfVersion) <= m.latest {
-		return m.Confs[req.ConfVersion].ToConf()
+	if version == -1 { /*asking for latest configuration*/
+		return m.ShardConfs[m.latest],nil
+	} else if version >= 0 && version <= m.latest {
+		return m.ShardConfs[version],nil
 	} else {
 		return nil, errors.New("conf version not valid")
 	}
 }
 
-/* return RPC client of master */
-func GetMasterRPCClient (sdClient *zk_client.SdClient) (ShardingServiceClient,*grpc.ClientConn,error){
-	/* connect to master */
-	if masterNode,err := sdClient.Get1Node("master"); err != nil {
-		return nil,nil,err
-	}else {
-		serverString := masterNode.Host + ":" + strconv.Itoa(masterNode.Port)
-		fmt.Println("master server String : " + serverString)
-		conn, err := grpc.Dial(serverString, grpc.WithInsecure())
-		if err != nil {
-			log.Fatal(err)
-			return nil,nil,err
-		}
-		return NewShardingServiceClient(conn),conn,nil
-	}
-}

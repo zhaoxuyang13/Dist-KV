@@ -14,12 +14,12 @@ message JoinRequest {
     repeated string names = 1;
   }
   //map from  gid ->  server_names
-  map<int32, ServerConfs> mapping = 1;
+  map<int32, ServerConfs> newGroups = 1;
 
 }
 
 message LeaveRequest {
-  repeated int32 gidList = 1;
+  repeated int32 GroupIDs = 1;
 }
 
 message QueryRequest{
@@ -36,12 +36,12 @@ message Conf{
   int32 shardNum = 2;
 
   message Group {
-    int32 gid = 1;
+    int32 groupID = 1;
     repeated string servers = 2;
     repeated int32 shards = 3;
   }
   // map from a gid -> Group (this map contains all groups in his replica
-  map<int32,Group> mapping = 3;
+  map<int32,Group> id2group = 3;
 
   //map from a replicaId -> gid (valid assignments for all 0 ~ ShardNum-1
   map<int32,int32> assignment = 4;

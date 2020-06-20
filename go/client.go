@@ -63,7 +63,7 @@ func (c *UserClient) Key2Server(key string) (string,int, error) {
 	if !exist{
 		return "",0, ErrInvalidConf
 	}
-	serverString := serviceNode.Host + ":" + strconv.Itoa(serviceNode.Port)
+	serverString := serviceNode.IP + ":" + strconv.Itoa(serviceNode.Port)
 	return serverString,shardID, nil
 }
 
@@ -240,7 +240,7 @@ func (c *UserClient) initZkClient() error {
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-	c.zkClient, err = zk_client.NewClient(conf.ServersString(), "/node", 10)
+	c.zkClient, err = zk_client.NewClient(conf.ServerStrings(), "/node", 10)
 	if err != nil {
 		panic(err)
 	}
@@ -251,21 +251,31 @@ var ErrInvalidVersion = errors.New("local version larger than remote version")
 
 /* fetch configuration from master server, only call it after initMasterRpc */
 func (c *UserClient) updateConf() (bool, error) {
-	msClient,conn,err := master.GetMasterRPCClient(c.zkClient)
+
+	masterNode,err := c.zkClient.Get1Node("master")
 	if err != nil {
+		log.Fatal("error: master died\n")
+	}
+	masterClient, err := master.NewRPCClient(master.ServerConf{
+		IP:       masterNode.IP,
+		Port:     masterNode.Port,
+		Hostname: masterNode.Hostname,
+	})
+	if err != nil {
+		log.Println(err.Error())
 		return false, err
 	}
-	defer conn.Close()
+	defer masterClient.Close()
 	fmt.Println("updating conf...")
-	if conf, err := msClient.Query(context.Background(), &master.QueryRequest{ConfVersion: -1}); err != nil {
+	if conf, err := masterClient.Query(-1); err != nil {
 		log.Fatal(err)
 		return false, err
-	} else if int(conf.Version) < c.conf.Version {
+	} else if conf.Version < c.conf.Version {
 		return false, ErrInvalidVersion
-	} else if int(conf.Version) == c.conf.Version {
+	} else if conf.Version == c.conf.Version {
 		return false, nil
 	} else {
-		c.conf = *master.NewConf(conf)
+		c.conf = *conf
 		if err := c.getPrimaries(); err != nil {
 			return false, nil
 		}
@@ -279,7 +289,7 @@ var ErrDuplicatePrimary = errors.New("not supposed to get duplicate primary entr
 /* fetch primaries' ip:port from zookeeper cluster */
 func (c *UserClient) getPrimaries() error {
 	fmt.Println("	updating primary information ...")
-	for gid := range c.conf.Groups {
+	for gid := range c.conf.Id2Groups {
 		if primaries, err := c.zkClient.GetNodes("slave_primary/" + strconv.Itoa(gid)); err != nil || len(primaries) != 1 {
 			if len(primaries) != 1 {
 				err = ErrDuplicatePrimary
@@ -340,29 +350,4 @@ func main() {
 	}
 	fmt.Println("Bye!")
 
-	/* TODO: move this to test file, and build a client according to it after master done.
-	conn, err := grpc.Dial("0.0.0.0:4000", grpc.WithInsecure()) // only for testing
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-	client := NewKVServiceClient(conn)
-
-	reply, err := client.Put(context.Background(), &Request{Value: "hello"})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(reply.GetValue())
-	reply, err = client.Get(context.Background(), &Request{Value: "hello"})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(reply.GetValue())
-	reply, err = client.Del(context.Background(), &Request{Value: "hello"})
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(reply.GetValue())
-	*/
 }

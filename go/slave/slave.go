@@ -12,8 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
-	//"fmt"
-	"net"
+
 	"strconv"
 	"sync"
 	"time"
@@ -25,7 +24,7 @@ var (
 	ErrWrongGroup = errors.New("key not managed by this group")
 	/* when slave is backup and request is not from primary*/
 	ErrNotPrimary = errors.New("don't send request to a back up server")
-	/* for del and get operation, key is managed by this group, but not in the storage */
+	/* for Del and Get operation, key is managed by this group, but not in the storage */
 	ErrNotFound = errors.New("key not exist on this machine's storage")
 )
 
@@ -47,92 +46,79 @@ type LocalStorage struct {
 	state   StorageState
 }
 
-type KVClient struct {
-	serviceClient KVServiceClient
-	hostname string
-	conn *grpc.ClientConn
+
+
+type ServerConf struct {
+	Hostname string
+	IP       string
+	Port     int
+	GroupID  int
+}
+
+func (conf *ServerConf) ServerString() string {
+	return conf.IP+ ":" + strconv.Itoa(conf.Port)
 }
 /*
 Slave : slave structure implement slave RPC semantics
 */
 /* maybe convert to sync.Map */
 type Slave struct {
-	/* connection to zookeeper */
 	ZkClient *zk_client.SdClient
-
+	conf ServerConf
 	/* Am I primary node ?*/
-	Primary bool
-	/*hostname,ip,port of current slave */
-	ip string
-	port int
-	hostname string
+	Primary        bool
 	path string
 	backupConfLock *sync.RWMutex
 	/* link to all back up servers of this cluster */
-	backupServers []KVClient
+	backupServers []*RPCClient
 	/* the version number storage updated to */
 	LocalVersion int
 
 	/*
-	ShardsLock : lock for groupInfo.shards(what shards current group serves),
-	acquire when modifying or reading*/
+		ShardsLock : lock for groupInfo.shards(what shards current group serves),
+		acquire when modifying or reading*/
 	ShardsLock *sync.RWMutex
-	GroupInfo  master.Group
+	shards 		[]int
 	// Gid 	  : the group id this slave belongs to, used to check configuration
-	// Shards : list of shards this slave will manage ,get from master every 100 milliseconds
+	// Shards : list of shards this slave will manage ,Get from master every 100 milliseconds
 
 	/*
-	StorageLock: lock for shardID -> *localstorage map
-	lock for individual Local Shard Storage is in LocalStorage Structure.
+		StorageLock: lock for shardID -> *localstorage map
+		lock for individual Local Shard Storage is in LocalStorage Structure.
 	*/
 	StorageLock   *sync.RWMutex
 	LocalStorages map[int]*LocalStorage // map from ShardID to LocalStorages
 
 	/*
-	SyncReqs: channel for requests from primary for processing
+		SyncReqs: channel for requests from primary for processing
 	*/
-	SyncReqs chan SyncRequest
+	SyncReqs chan request
 }
 
 const SyncReqChanLength = 100
-func CreateSlave(client *zk_client.SdClient, gid int,hostname string,ip string, port int) *Slave {
+func NewSlave(conf ServerConf, client *zk_client.SdClient) *Slave {
 	return &Slave{
-		ZkClient:     client,
-		Primary:      false,
-		ip: ip,
-		port: port,
-		hostname: hostname,
-		path : "",
+		ZkClient: client,
+		Primary:        false,
+		conf : conf,
 		backupConfLock: new(sync.RWMutex),
-		backupServers: make([]KVClient,0),
-		LocalVersion: 0,
-		ShardsLock:   new(sync.RWMutex),
-		GroupInfo: master.Group{
-			Gid:     gid,
-			Servers: make([]string, 0),
-			Shards:  make([]int, 0),
-		},
-		//ConfLock: new(sync.RWMutex),
-		//Conf: master.Configuration{
-		//	Version: 0,
-		//},
+		backupServers:  make([]*RPCClient,0),
+		LocalVersion:   0,
+		ShardsLock:     new(sync.RWMutex),
+		shards: make([]int,0),
 		StorageLock:   new(sync.RWMutex),
 		LocalStorages: make(map[int]*LocalStorage),
 		//SyncReqs: make(chan SyncRequest, SyncReqChanLength),
 		SyncReqs: nil, // will only be init before registered as a backup,  if the node fail to be the primary
 	}
 }
-/*
-Put : RPC call to put a key value
-*/
-func (s *Slave) Put(ctx context.Context, args *Request) (*Empty, error) {
-	shardID := int(args.ShardID)
-	return s.put(args.Key,args.Value,shardID)
+func (s *Slave)ServerString() string {
+	return s.conf.ServerString()
 }
-func (s *Slave) put(key string , value string , shardID int ) (*Empty,error){
-	log.Printf("put %s-%s in shard %d\n", key, value, shardID)
+func (s *Slave) Put(key string , value string , shardID int ) (*Empty,error) {
+	log.Printf("Put %s-%s in shard %d\n", key, value, shardID)
 	s.ShardsLock.RLock()
-	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+	if Utils.Contains(s.shards, shardID) == false {
 		s.ShardsLock.RUnlock()
 		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
@@ -155,11 +141,11 @@ func (s *Slave) put(key string , value string , shardID int ) (*Empty,error){
 	localStorage.storage[key] = value
 
 	if s.Primary {
-		if err := s.forwardRequest(&SyncRequest{
+		if err := s.forwardRequest(request{
 			Key:     key,
 			Value:   value,
-			ShardID: int32(shardID),
-			ReqCode: PutReq,
+			ShardID: shardID,
+			ReqCode: DelReq,
 		}); err != nil {
 			log.Printf("forwarding error\n")
 			return nil, ErrNotPrimary //TODO: this is wrong error code
@@ -168,17 +154,11 @@ func (s *Slave) put(key string , value string , shardID int ) (*Empty,error){
 	/* release lock for the key, done by defer*/
 	return &Empty{}, nil
 }
-/*
-Get : RPC call to get a key */
-func (s *Slave) Get(ctx context.Context, args *Request) (*Response, error) {
-	shardID := int(args.ShardID)
 
-	return s.get(args.Key,shardID)
-}
-func (s *Slave)get(key string , shardID int)  (*Response,error){
-	log.Printf("get %s in shard %d\n", key, shardID)
+func (s *Slave) Get(key string , shardID int)  (*Response,error) {
+	log.Printf("Get %s in shard %d\n", key, shardID)
 	s.ShardsLock.RLock()
-	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+	if Utils.Contains(s.shards, shardID) == false {
 		s.ShardsLock.RUnlock()
 		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
@@ -202,20 +182,12 @@ func (s *Slave)get(key string , shardID int)  (*Response,error){
 		}
 	}
 }
-/*
-Del: RPC call to delete a key
-*/
-func (s *Slave) Del(ctx context.Context, args *Request) (*Empty, error) {
-	shardID := int(args.ShardID)
 
-	return s.del(args.Key, shardID)
-}
+func (s *Slave) Del(key string, shardID int) (*Empty, error) {
 
-func (s *Slave) del(key string, shardID int) (*Empty, error) {
-
-	log.Printf("del %s in shard %d\n", key, shardID)
+	log.Printf("Del %s in shard %d\n", key, shardID)
 	s.ShardsLock.RLock()
-	if Utils.Contains(s.GroupInfo.Shards, shardID) == false {
+	if Utils.Contains(s.shards, shardID) == false {
 		s.ShardsLock.RUnlock()
 		return nil, status.Errorf(codes.Unavailable, ErrWrongGroup.Error())
 	}
@@ -238,10 +210,10 @@ func (s *Slave) del(key string, shardID int) (*Empty, error) {
 		}
 	}
 	if s.Primary{
-		if err := s.forwardRequest(&SyncRequest{
-			Key:           key,
-			ShardID:       int32(shardID),
-			ReqCode:       DelReq,
+		if err := s.forwardRequest(request{
+			Key:     key,
+			ShardID: shardID,
+			ReqCode: DelReq,
 		}); err != nil {
 			log.Printf("forwarding error\n")
 			return nil,ErrNotPrimary //TODO: this is wrong error code
@@ -255,27 +227,36 @@ const (
 	PutReq = iota
 	DelReq
 )
+
+type request struct {
+	Key  string
+	Value string
+	ShardID int
+	ReqCode int
+}
 /*
 SyncRequest
 */
-func (s* Slave)Sync(ctx context.Context, req *SyncRequest)(*Empty, error) {
+func (s* Slave)Sync(req request)(*Empty, error) {
 	/* no need to acquire lock when sync because primary already has lock */
-	s.SyncReqs <- *req
+	s.SyncReqs <- req
 	return &Empty{},nil
 }
-func (s *Slave)forwardRequest(req *SyncRequest) error {
+func (s *Slave)forwardRequest(req request) error {
 	s.backupConfLock.RLock()
 	defer s.backupConfLock.RUnlock()
+
 	wg := sync.WaitGroup{}
 	wg.Add(len(s.backupServers))
 	for _,backup := range s.backupServers {
-		go func(backup KVClient) {
+		backup := backup
+		go func() {
 			log.Printf("forward request to %v\n",backup.hostname)
-			if _, err := backup.serviceClient.Sync(context.Background(), req); err != nil {
+			if _, err := backup.Sync(req); err != nil {
 				log.Printf(err.Error())
 			}
 			wg.Done()
-		}(backup)
+		}()
 	}
 	wg.Wait()
 	return nil
@@ -283,15 +264,15 @@ func (s *Slave)forwardRequest(req *SyncRequest) error {
 /**/
 func (s *Slave)ProcessSyncRequests(){
 	for req := range s.SyncReqs {
-		shardID := int(req.ShardID)
+		shardID := req.ShardID
 		log.Printf("receive request:  %+v\n",req)
 		switch req.ReqCode { // todo: fault handling, backup conf may be lagged behind
 		case PutReq:
-			if _,err := s.put(req.Key,req.Value,shardID); err != nil {
+			if _,err := s.Put(req.Key,req.Value,shardID); err != nil {
 				log.Printf(err.Error())
 			}
 		case DelReq:
-			if _,err :=s.del(req.Key,shardID); err != nil {
+			if _,err :=s.Del(req.Key,shardID); err != nil {
 				log.Printf(err.Error())
 			}
 		}
@@ -323,19 +304,19 @@ func (s *Slave) acquireStorage(shard int) *LocalStorage {
 	defer s.StorageLock.RUnlock()
 	return s.LocalStorages[shard]
 }
+
 /*
 RPC call to Transfer a Shard to here
 */
-func (s *Slave) TransferShard(ctx context.Context, req *ShardRequest) (*Empty, error) {
+func (s *Slave) TransferShard(shardID int,storage map[string]string) (*Empty, error) {
 
-	shardID := int(req.ShardID)
 
 	log.Printf("receive shard %d\n", shardID)
 	localStorage := s.assureStorage(shardID, UNREADY)
 	localStorage.lock.Lock()
 	defer localStorage.lock.Unlock()
 
-	for key, value := range req.Storage {
+	for key, value := range storage {
 		localStorage.storage[key] = value
 	}
 	localStorage.state = READY
@@ -347,13 +328,15 @@ func (s *Slave) TransferShard(ctx context.Context, req *ShardRequest) (*Empty, e
 		wg := sync.WaitGroup{}
 		wg.Add(len(s.backupServers))
 		for _,backup := range s.backupServers {
-			go func(backup KVClient) {
+			// localize backup, or the backup variable will always be the last one in the iteration
+			backup := backup
+			go func() {
 				log.Printf("forward transfer shard to %v\n",backup.hostname)
-				if _, err := backup.serviceClient.TransferShard(context.Background(), req); err != nil {
+				if _, err := backup.TransferShard(shardID,storage); err != nil {
 					log.Printf(err.Error())
 				}
 				wg.Done()
-			}(backup)
+			}()
 		}
 		wg.Wait()
 	}
@@ -388,7 +371,7 @@ func diffShards(old []int, new []int) ([]int, []int) {
 func (s *Slave) sendShard(shard int, gid int) error {
 
 	log.Printf("send shard %d to gid %d\n", shard, gid)
-	/* get RPC client of primary node */
+	/* Get RPC client of primary node */
 	primaryClient, conn, err := s.getSlavePrimaryRPCClient(gid)
 	if err != nil {
 		log.Println(err)
@@ -435,8 +418,8 @@ func (s *Slave) ProcessNewConf(confChan chan master.Configuration) {
 		*/
 		log.Printf("new configuration found %+v\n", conf)
 		if s.LocalVersion == 0 && conf.Version == 1 {
-			for _, shard := range conf.Groups[s.GroupInfo.Gid].Shards {
-				s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
+			for _, shard := range conf.Id2Groups[s.conf.GroupID].Shards {
+				s.shards = append(s.shards, shard)
 				s.assureStorage(shard, READY)
 			}
 			s.LocalVersion = 1
@@ -444,7 +427,7 @@ func (s *Slave) ProcessNewConf(confChan chan master.Configuration) {
 		}
 		/*deep copy latest conf received*/
 		var shards []int
-		if group, exist := conf.Groups[s.GroupInfo.Gid]; exist {
+		if group, exist := conf.Id2Groups[s.conf.GroupID]; exist {
 			shards = make([]int, len(group.Shards))
 			copy(shards, group.Shards)
 		} else {
@@ -452,8 +435,8 @@ func (s *Slave) ProcessNewConf(confChan chan master.Configuration) {
 			shards = make([]int, 0)
 		}
 		version := conf.Version
-		log.Printf("old shards, %v, new conf %v, new shards %v\n", s.GroupInfo.Shards, conf.Groups[s.GroupInfo.Gid], shards)
-		added, removed := diffShards(s.GroupInfo.Shards, shards)
+		log.Printf("old shards, %v, new conf %v, new shards %v\n", s.shards, conf.Id2Groups[s.conf.GroupID], shards)
+		added, removed := diffShards(s.shards, shards)
 		if len(added) == 0 && len(removed) == 0 {
 			s.LocalVersion = version
 			continue
@@ -478,7 +461,7 @@ func (s *Slave) ProcessNewConf(confChan chan master.Configuration) {
 					}()
 					go func() {
 						s.ShardsLock.Lock()
-						s.GroupInfo.Shards = Utils.Delete(s.GroupInfo.Shards, shardID)
+						s.shards = Utils.Delete(s.shards, shardID)
 						s.ShardsLock.Unlock()
 						wg.Done()
 					}()
@@ -497,17 +480,26 @@ func (s *Slave) ProcessNewConf(confChan chan master.Configuration) {
 		for _, shard := range added {
 			s.assureStorage(shard, UNREADY)
 			s.ShardsLock.Lock()
-			s.GroupInfo.Shards = append(s.GroupInfo.Shards, shard)
+			s.shards = append(s.shards, shard)
 			s.ShardsLock.Unlock()
 		}
-		log.Printf("shard after send and added:  %+v\n", s.GroupInfo.Shards)
+		log.Printf("shard after send and added:  %+v\n", s.shards)
 
 		/* TODO: remove those shards not used */
 	}
 }
 func (s *Slave) UpdateConfEveryPeriod(milliseconds time.Duration) {
 
-	masterClient, conn, err := master.GetMasterRPCClient(s.ZkClient)
+	masterNode,err := s.ZkClient.Get1Node("master")
+	if err != nil {
+		log.Fatal("error: master died\n")
+	}
+
+	masterClient, err := master.NewRPCClient(master.ServerConf{
+		IP:       masterNode.IP,
+		Port:     masterNode.Port,
+		Hostname: masterNode.Hostname,
+	})
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -515,23 +507,23 @@ func (s *Slave) UpdateConfEveryPeriod(milliseconds time.Duration) {
 	confChan := make(chan master.Configuration)
 	/* start a separate timer, conn should wait until timer end. */
 	go func() {
-		defer conn.Close()
+		defer masterClient.Close()
 		log.Println("	update configuration every period of time")
 		currentVersion := 0
 		for range time.Tick(time.Millisecond * milliseconds) {
-			conf, err := masterClient.Query(context.Background(), &master.QueryRequest{ConfVersion: -1})
+			conf, err := masterClient.Query(-1)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if int(conf.Version) < currentVersion {
+			if conf.Version < currentVersion {
 				log.Println("Error: local conf version larger than remote version")
-			} else if int(conf.Version) == currentVersion {
-				// dont do anything, just skip
+			} else if conf.Version == currentVersion {
+				// configuration of same version, just skip
 			} else {
 				// deep copy
 				log.Printf("received new Conf %d\n",conf.Version)
-				currentVersion = int(conf.Version)
-				confChan <- *master.NewConf(conf)
+				currentVersion = conf.Version
+				confChan <- *conf
 			}
 		}
 		log.Println("should never reach here")
@@ -545,7 +537,7 @@ func (s *Slave)getSlavePrimaryRPCClient(gid int) (KVServiceClient, *grpc.ClientC
 	if primaryNode, err := s.ZkClient.Get1Node("slave_primary/" + strconv.Itoa(gid)); err != nil {
 		return nil, nil, err
 	} else {
-		serverString := primaryNode.Host + ":" + strconv.Itoa(primaryNode.Port)
+		serverString := primaryNode.IP + ":" + strconv.Itoa(primaryNode.Port)
 		conn, err := grpc.Dial(serverString, grpc.WithInsecure())
 		if err != nil {
 			return nil, nil, err
@@ -558,9 +550,9 @@ func (s *Slave)getSlavePrimaryRPCClient(gid int) (KVServiceClient, *grpc.ClientC
 func (s* Slave) processBackupConfs(serverChan chan []*zk_client.ServiceNode){
 	/* iterate until channel closed */
 	for backups := range serverChan {
-		backupServersNew := make([]KVClient,0)
+		backupServersNew := make([]*RPCClient,0)
 		/* check for new servers and start connection */
-		findServer := func (s []KVClient, e string) int {
+		findServer := func (s []*RPCClient, e string) int {
 			for index, a := range s {
 				if a.hostname == e {
 					return index
@@ -571,16 +563,14 @@ func (s* Slave) processBackupConfs(serverChan chan []*zk_client.ServiceNode){
 		for _,backup := range backups {
 			index := findServer(s.backupServers, backup.Hostname)
 			if index == -1 {
-				serverString := backup.ServerString()
-				conn, err := grpc.Dial(serverString, grpc.WithInsecure())
-				if err != nil {
-					log.Printf("grpc dial error:" + err.Error())
+				if server, err := NewRPCClient(ServerConf{
+					Hostname: backup.Hostname,
+					IP:       backup.IP,
+					Port:     backup.Port,
+				}); err != nil {
+					log.Printf("create rpc client to %s,  error:" + err.Error(), backup.ServerString())
 				} else {
-					backupServersNew = append(backupServersNew, KVClient{
-						serviceClient: NewKVServiceClient(conn),
-						hostname:      backup.Hostname,
-						conn:          conn,
-					})
+					backupServersNew = append(backupServersNew,server)
 				}
 			}else {
 				backupServersNew = append(backupServersNew, s.backupServers[index])
@@ -594,9 +584,9 @@ func (s* Slave) processBackupConfs(serverChan chan []*zk_client.ServiceNode){
 }
 func (s *Slave) ElectThenWork(){
 
-	primaryPath := "slave_primary/" + strconv.Itoa(s.GroupInfo.Gid)
-	backupPath := "slave_backup/" + strconv.Itoa(s.GroupInfo.Gid)
-	slaveNode := zk_client.ServiceNode{Name: primaryPath, Host: s.ip, Port: s.port, Hostname: s.hostname}
+	primaryPath := "slave_primary/" + strconv.Itoa(s.conf.GroupID)
+	backupPath := "slave_backup/" + strconv.Itoa(s.conf.GroupID)
+	slaveNode := zk_client.ServiceNode{Name: primaryPath, IP: s.conf.IP, Port: s.conf.Port, Hostname: s.conf.Hostname}
 	if err := s.ZkClient.TryPrimary(&slaveNode); err != nil {
 		if err != zk.ErrNodeExists {
 			log.Printf(err.Error())
@@ -604,23 +594,23 @@ func (s *Slave) ElectThenWork(){
 		}
 		s.Primary = false
 		/* create sync chan before register */
-		s.SyncReqs = make(chan SyncRequest,SyncReqChanLength)
+		s.SyncReqs = make(chan request,SyncReqChanLength)
 
 		/* already exist a primary*/
-		slaveNode = zk_client.ServiceNode{Name: backupPath, Host: s.ip, Port: s.port, Hostname: s.hostname}
+		slaveNode = zk_client.ServiceNode{Name: backupPath, IP: s.conf.IP, Port: s.conf.Port, Hostname: s.conf.Hostname}
 		if path,err := s.ZkClient.Register(&slaveNode); err != nil {
 			panic(err)
 		}else {
 			s.path = path
 		}
-		log.Printf("I'm one of backup nodes of group %d\n",s.GroupInfo.Gid)
+		log.Printf("I'm one of backup nodes of group %d\n",s.conf.GroupID)
 		nodeChan, _ := s.ZkClient.Subscribe1Node(primaryPath)
 		go s.WatchPrimary(nodeChan)
 		go s.ProcessSyncRequests()
 	} else {
 		/*select as primary node, just return and wait for rpc service to start*/
 		s.Primary = true
-		log.Printf("I'm the primary node of group %d\n",s.GroupInfo.Gid)
+		log.Printf("I'm the primary node of group %d\n",s.conf.GroupID)
 		/* primary should connect to back up servers */
 		serverChan, _ := s.ZkClient.SubscribeNodes(backupPath, make(chan struct{})) // pass in a non-closing channel
 		go s.processBackupConfs(serverChan)
@@ -644,25 +634,14 @@ func (s *Slave) WatchPrimary(nodeChan chan zk_client.ServiceNode) {
 	s.ElectThenWork()
 }
 /*
-StartService : start KV service at ip:port as hostname
+StartService : start KV service at IP:Port as hostname
 wrapper function for slave server to run*/
 func (s *Slave) StartService(ip string, port int, hostname string) {
 
-	/* start RPC Service on ip:port */
+	rpcServer := NewRPCServer(s)
+	/* has to use defer because when server serve, the execution will block*/
+	defer rpcServer.Serve()
 
-	grpcServer := grpc.NewServer()
-	RegisterKVServiceServer(grpcServer, s)
-	listen, err := net.Listen("tcp", ip+":"+strconv.Itoa(port)) // hard configure TCP
-	if err != nil {
-		log.Fatal(err)
-	}
-	/* defer execute in LIFO, close connection at last*/
-	defer func() {
-		log.Println("slave server start serving requests at " + ip + ":" + strconv.Itoa(port))
-		if err := grpcServer.Serve(listen); err != nil {
-			log.Fatal(err)
-		}
-	}()
 
 	/* start timer, slave server will retrieve configuration from master every time period*/
 	defer s.UpdateConfEveryPeriod(100)

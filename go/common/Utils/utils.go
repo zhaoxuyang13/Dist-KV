@@ -2,6 +2,7 @@ package Utils
 
 import (
 	"hash/crc32"
+	"log"
 )
 
 
@@ -25,6 +26,11 @@ func Delete(s []int, sid int) []int{
 		}
 	}
 	return s
+}
+func PrintErrTrace(){
+	if r := recover(); r != nil {
+		log.Printf("err recovered: %+v\n",r)
+	}
 }
 /*
 func Delete(slice interface{}, element interface{}) ([]interface{},error){

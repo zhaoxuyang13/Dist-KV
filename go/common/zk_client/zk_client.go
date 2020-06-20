@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"strconv"
 	"time"
@@ -14,12 +15,12 @@ import (
 /* Service Node Information, will be marshalled and stored in zk-cluster as Value.*/
 type ServiceNode struct {
 	Name     string `json:"name"` // 服务名称，这里是user
-	Host     string `json:"host"`
+	IP       string `json:"host"`
 	Port     int    `json:"port"`
 	Hostname string `json:"hostname"` // hostname of this service, not exactly like hostname
 }
 func (s *ServiceNode) ServerString() string {
-	return s.Host + ":" + strconv.Itoa(s.Port)
+	return s.IP + ":" + strconv.Itoa(s.Port)
 }
 // 在定义一个服务发现的客户端结构体SdClient。
 /* client information,
@@ -33,13 +34,28 @@ type SdClient struct {
 	conn      *zk.Conn // zk的客户端连接
 }
 
-// 编写构造器，创建根节点
+func CreateClientFromConfigurationFile(filename string) (*SdClient, error) {
+	content, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil,err
+	}
+
+	var conf Conf
+	err = json.Unmarshal(content, &conf)
+	if err != nil {
+		return nil, err
+	}
+
+	zkClient, err := NewClient(conf.ServerStrings(), conf.ZkRoot,conf.ZkTimeout)
+	if err != nil {
+		return nil,err
+	}
+
+	return zkClient,nil
+}
+
 /* client constructor */
 func NewClient(zkServers []string, zkRoot string, timeout int) (*SdClient, error) {
-	// client := new(SdClient)
-	// client.zkServers = zkServers
-	// client.zkRoot = zkRoot
-
 	// 连接服务器
 	conn, _, err := zk.Connect(zkServers, time.Duration(timeout)*time.Second)
 	if err != nil {
@@ -277,7 +293,7 @@ func (s *SdClient)DeleteNode(path string) error {
 	//	if err != nil {
 	//		return err
 	//	}
-	//	if node.Hostname == hostname{
+	//	if node.hostname == hostname{
 	//		log.Printf("delete emit\n")
 	//		s.conn.Delete(name, 0)
 	//		return nil
@@ -317,10 +333,12 @@ func (s *ZkServer) ToString() string {
 
 /* configuration.json data structure*/
 type Conf struct {
-	Servers []ZkServer `json:"zookeepers"`
+	Servers   []ZkServer `json:"zookeepers"`
+	ZkRoot    string     `json:"zkRoot"`
+	ZkTimeout int        `json:"zkTimeout"`
 }
 
-func (c *Conf) ServersString() []string {
+func (c *Conf) ServerStrings() []string {
 	strings := make([]string, 0)
 	for _, server := range c.Servers {
 		strings = append(strings, server.ToString())

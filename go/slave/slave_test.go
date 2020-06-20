@@ -13,10 +13,9 @@ import (
 func TestSlave_KV(t *testing.T) {
 	assert := assert.New(t)
 	slave := Slave{
-		//bigLock: sync.Mutex{},
-		//keyLocks: make(map[string]*sync.Mutex),
 		LocalStorages: make(map[int]*LocalStorage),
 	}
+
 	var ctx context.Context
 	args := Request{
 		ShardID : 0,
@@ -27,12 +26,12 @@ func TestSlave_KV(t *testing.T) {
 	if _, err := slave.Put(ctx, &args); err != nil {
 		assert.Fail("Put operation failed \n" + err.Error())
 	}else {
-		print("put K-V: " + args.GetKey() )
+		print("Put K-V: " + args.GetKey() )
 	}
 	if res, err := slave.Get(ctx, &args);err != nil {
 		assert.Fail("Get operation failed \n" + err.Error())
 	}else {
-		print("get Value " + res.GetValue() + "for key " + args.GetKey())
+		print("Get Value " + res.GetValue() + "for key " + args.GetKey())
 	}
 	if _, err := slave.Del(ctx, &args); err != nil {
 		assert.Fail("delete operation failed \n" + err.Error())

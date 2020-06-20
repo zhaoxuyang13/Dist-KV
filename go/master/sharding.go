@@ -10,7 +10,7 @@ func (c *Configuration) GetShard(key string) int { // should I convert it to int
 }
 
 //type Server struct {
-//	Ip   string
+//	IP   string
 //	Port int
 //	Name string
 //}
@@ -22,13 +22,12 @@ type Group struct {
 }
 
 /* current only support 2 confs*/
-func NewGroup(gid int, servers *JoinRequest_ServerConfs) *Group {
-	group := Group{
+func NewGroup(gid int, servers []string) *Group {
+	return &Group{
 		Gid:     gid,
-		Servers: servers.Names,
+		Servers: servers,
 		Shards:  make([]int, 0),
 	}
-	return &group
 }
 
 
@@ -41,9 +40,9 @@ Query
 	Put/Get/Del => command
 	Key => Value
 Join
-	Ip:Port => ReSharding
+	IP:Port => ReSharding
 Leave
-	Ip:Port => ReSharding
+	IP:Port => ReSharding
 // Move
 
 
@@ -53,8 +52,8 @@ type Configuration struct {
 	Version  int
 	ShardNum int
 	// map from a gid -> Group (this map contains all groups in his replica
-	Groups map[int]Group
-	//map from a shardId -> gid (valid assignments for all 0 ~ ShardNum-1
+	Id2Groups map[int]Group
+	//map from a shardId -> gid (valid assignments for all 0 ~ shardNum-1
 	Assignment map[int]int //
 }
 
@@ -64,7 +63,7 @@ DeepCopy :
 */
 func (c *Configuration)DeepCopy() (*Configuration,error){
 	groups := make(map[int]Group)
-	for gid, group := range c.Groups{
+	for gid, group := range c.Id2Groups {
 		servers := make([]string,len(group.Servers))
 		shards := make([]int,len(group.Shards))
 		copy(servers,group.Servers)
@@ -82,7 +81,7 @@ func (c *Configuration)DeepCopy() (*Configuration,error){
 	return &Configuration{
 		Version:    c.Version,
 		ShardNum:   c.ShardNum,
-		Groups:     groups,
+		Id2Groups:  groups,
 		Assignment: assignment,
 	},nil
 }
@@ -92,20 +91,20 @@ ToConf helper method, convert Configuration to Conf
 */
 func (c *Configuration) ToConf() (*Conf, error) {
 	mapping := make(map[int32]*Conf_Group)
-	convIntSlice := func(v []int) []int32 {
+	toIntSlice := func(v []int) []int32 {
 		vm := make([]int32, len(v))
 		for i, val := range v {
 			vm[i] = int32(val)
 		}
 		return vm
 	}
-	for gid, group := range c.Groups {
+	for gid, group := range c.Id2Groups {
 		confGroup := Conf_Group{
-			Gid:     int32(gid),
+			GroupID:     int32(gid),
 			Servers: group.Servers,
-			Shards:  convIntSlice(group.Shards),
+			Shards:  toIntSlice(group.Shards),
 		}
-		mapping[confGroup.Gid] = &confGroup
+		mapping[confGroup.GroupID] = &confGroup
 	}
 	assignment := make(map[int32]int32)
 	for sid, gid := range c.Assignment {
@@ -114,7 +113,7 @@ func (c *Configuration) ToConf() (*Conf, error) {
 	return &Conf{
 		Version:    int32(c.Version),
 		ShardNum:   int32(c.ShardNum),
-		Mapping:    mapping,
+		Id2Group:    mapping,
 		Assignment: assignment,
 	}, nil
 }
@@ -131,7 +130,7 @@ func NewConf(conf *Conf) *Configuration {
 		}
 		return vm
 	}
-	for gid, group := range conf.Mapping {
+	for gid, group := range conf.Id2Group {
 		servers := make([]string, len(group.Servers))
 		copy(servers,group.Servers)
 
@@ -148,7 +147,7 @@ func NewConf(conf *Conf) *Configuration {
 	return &Configuration{
 		Version:    int(conf.Version),
 		ShardNum:   int(conf.ShardNum),
-		Groups:     mapping,
+		Id2Groups:  mapping,
 		Assignment: assignment,
 	}
 }
