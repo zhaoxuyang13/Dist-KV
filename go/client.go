@@ -266,7 +266,7 @@ func (c *UserClient) updateConf() (bool, error) {
 		return false, err
 	}
 	defer masterClient.Close()
-	fmt.Printf("updating conf... current conf %+v\n", c.conf)
+	fmt.Printf("updating conf...")
 	if conf, err := masterClient.Query(-1); err != nil {
 		log.Fatal(err)
 		return false, err
