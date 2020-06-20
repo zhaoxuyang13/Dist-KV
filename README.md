@@ -43,9 +43,6 @@ $ go run go/slave_server.go [ip] [port] [hostname] [groupID]
 # ip and port expose as RPC service
 # hostname is used to distinguish
 # groupID  is for grouping.
-$ go run go/slave_server.go [command] [groupIDs ...]
-# command = "join-group" / "leave-group"
-# groupIDs is an array of groupid to be configured
 ```
 
 **Master**
@@ -60,3 +57,10 @@ $ go run go/master_server.go [ip] [port] [hostname]
 $ go run go/client.go
 ```
 
+**Admin**
+
+```
+$ go run go/admin.go [command] [groupIDs ...]
+# command = "join-group" / "leave-group"
+# groupIDs is an array of groupid to be configured
+```

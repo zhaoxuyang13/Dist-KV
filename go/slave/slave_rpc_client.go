@@ -26,6 +26,7 @@ func NewRPCClient(conf ServerConf) (*RPCClient,error) {
 	return &RPCClient{
 		client: NewKVServiceClient(conn),
 		conn : conn,
+		hostname: conf.Hostname,
 	},nil
 }
 

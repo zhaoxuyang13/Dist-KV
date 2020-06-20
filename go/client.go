@@ -226,7 +226,7 @@ func (c *UserClient) SimpleDel(args []string) error {
 type UserClient struct {
 	conf      master.Configuration
 	primaries map[int]zk_client.ServiceNode
-	zkClient  *zk_client.SdClient
+	zkClient  *zk_client.Client
 }
 
 func (c *UserClient) initZkClient() error {

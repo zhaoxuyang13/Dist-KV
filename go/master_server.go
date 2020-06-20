@@ -22,12 +22,21 @@ func main() { // start shardMaster Service and register Service according to cmd
 		log.Fatal(err)
 	}
 
+	defer func() {
+		if err := recover(); err !=nil {
+			log.Printf("ultimate reason of crash %+v\n",err)
+		}
+		log.Println("closing zookeeper client")
+		zkClient.Close()
+	}()
+
 	masterServer := master.NewServer(master.ServerConf{
 		IP:       ip,
 		Port:     port,
 		ShardNum: shardNum,
 		Hostname: hostname,
 	},zkClient)
-	defer masterServer.Serve()
+	/* serve will block*/
+	masterServer.Serve()
 
 }

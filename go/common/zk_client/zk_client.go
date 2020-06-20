@@ -28,13 +28,13 @@ a client connect to a list of servers.
 at a root node
 with a connection.
 */
-type SdClient struct {
+type Client struct {
 	zkServers []string // 多个节点地址
 	zkRoot    string   // 服务根节点，这里是/api
 	conn      *zk.Conn // zk的客户端连接
 }
 
-func CreateClientFromConfigurationFile(filename string) (*SdClient, error) {
+func CreateClientFromConfigurationFile(filename string) (*Client, error) {
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil,err
@@ -55,13 +55,13 @@ func CreateClientFromConfigurationFile(filename string) (*SdClient, error) {
 }
 
 /* client constructor */
-func NewClient(zkServers []string, zkRoot string, timeout int) (*SdClient, error) {
+func NewClient(zkServers []string, zkRoot string, timeout int) (*Client, error) {
 	// 连接服务器
 	conn, _, err := zk.Connect(zkServers, time.Duration(timeout)*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	client := SdClient{
+	client := Client{
 		zkServers: zkServers,
 		zkRoot:    zkRoot,
 		conn:      conn,
@@ -77,12 +77,12 @@ func NewClient(zkServers []string, zkRoot string, timeout int) (*SdClient, error
 /* client methods */
 
 /* close client connection */ // 关闭连接，释放临时节点
-func (s *SdClient) Close() {
+func (s *Client) Close() {
 	s.conn.Close()
 }
 
 /* create root if not exist */
-func (s *SdClient) ensureRoot() error {
+func (s *Client) ensureRoot() error {
 	exists, _, err := s.conn.Exists(s.zkRoot)
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func (s *SdClient) ensureRoot() error {
 
 // 接下来我们编写服务注册方法
 /* client register a service, protected temporal sequential add */
-func (s *SdClient) Register(node *ServiceNode) (string,error) {
+func (s *Client) Register(node ServiceNode) (string,error) {
 	if err := s.ensureName(node.Name); err != nil {
 		return "",err
 	}
@@ -117,7 +117,7 @@ func (s *SdClient) Register(node *ServiceNode) (string,error) {
 	return newPath,nil
 }
 
-func (s *SdClient) TryPrimary(node *ServiceNode)error {
+func (s *Client) TryPrimary(node ServiceNode)error {
 	if err := s.ensureName(node.Name); err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (s *SdClient) TryPrimary(node *ServiceNode)error {
 }
 
 /* create name entry if not exist */
-func (s *SdClient) ensureName(name string) error {
+func (s *Client) ensureName(name string) error {
 	path := s.zkRoot + "/" + name
 	exists, _, err := s.conn.Exists(path)
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *SdClient) ensureName(name string) error {
 /* get service node list
 
  */
-func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
+func (s *Client) GetNodes(name string) ([]*ServiceNode, error) {
 	path := s.zkRoot + "/" + name
 	// 获取字节点名称
 	childs, _, err := s.conn.Children(path)
@@ -188,7 +188,7 @@ func (s *SdClient) GetNodes(name string) ([]*ServiceNode, error) {
 /*
 SubscribeNodes : return a channel that emit a []*ServiceNode whenever the children under "name"path change
 */
-func (s *SdClient) SubscribeNodes(name string,done chan struct{}) (chan []*ServiceNode, error){
+func (s *Client) SubscribeNodes(name string,done chan struct{}) (chan []*ServiceNode, error){
 	path := s.zkRoot + "/" + name
 	// 获取字节点名称
 	nodesChan := make(chan []*ServiceNode)
@@ -245,7 +245,7 @@ Subscribe1Node :
 Watch the status of one node, and return a channel
 channel will close if the node no longer exist
 */
-func (s *SdClient) Subscribe1Node(name string) (chan ServiceNode, error){
+func (s *Client) Subscribe1Node(name string) (chan ServiceNode, error){
 	resChan := make(chan ServiceNode)
 	done := make(chan struct{})
 	nodeChan, _ := s.SubscribeNodes(name,done)
@@ -264,11 +264,11 @@ func (s *SdClient) Subscribe1Node(name string) (chan ServiceNode, error){
 	}()
 	return resChan,nil
 }
-//func (s *SdClient)GetStat(name string, hostname string) error
+//func (s *Client)GetStat(name string, hostname string) error
 /*
 Delete Node: delete node with hostname under the path name
 */
-func (s *SdClient)DeleteNode(path string) error {
+func (s *Client)DeleteNode(path string) error {
 
 
 	//path := s.zkRoot + "/" + name
@@ -309,7 +309,7 @@ func (s *SdClient)DeleteNode(path string) error {
 */
 var ErrNotFound = errors.New("not found any node under the path")
 var ErrMultipleNodes = errors.New("found multiple nodes, supposed to be one")
-func (s *SdClient) Get1Node(name string) (*ServiceNode, error){
+func (s *Client) Get1Node(name string) (*ServiceNode, error){
 	if nodes, err := s.GetNodes(name); err != nil {
 		return nil,err
 	}else if len(nodes) == 0 {
