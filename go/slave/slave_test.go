@@ -20,13 +20,7 @@ func ContainsKey(reqs []request,key string) bool{
 }
 func TestSlave_Concurrent(t *testing.T) {
 	assert := assert.New(t)
-	slave := NewSlave(ServerConf{
-		Hostname: "slave-1",
-		IP:       "127.0.0.1",
-		Port:     4001,
-		GroupID:  1,
-	})
-	slave.Primary = false
+	slave := NewSlave()
 	shardNum := 20
 	for i:=0 ; i < shardNum; i ++{
 		slave.shards = append(slave.shards, i)
@@ -55,7 +49,7 @@ func TestSlave_Concurrent(t *testing.T) {
 	for _,req := range reqs {
 		req := req
 		go func() {
-			err := slave.Put(req.Key,req.Value,req.ShardID)
+			err := slave.put(req.Key,req.Value,req.ShardID)
 			assert.True(err == nil)
 			wg.Done()
 		}()
@@ -68,7 +62,7 @@ func TestSlave_Concurrent(t *testing.T) {
 	for _,req := range reqs{
 		req := req
 		go func() {
-			v,err := slave.Get(req.Key,req.ShardID)
+			v,err := slave.get(req.Key,req.ShardID)
 			assert.True(err == nil)
 			assert.Equal(req.Value,v)
 			wg.Done()
@@ -81,7 +75,7 @@ func TestSlave_Concurrent(t *testing.T) {
 	for _,req := range reqs{
 		req := req
 		go func() {
-			err := slave.Del(req.Key,req.ShardID)
+			err := slave.del(req.Key,req.ShardID)
 			assert.True(err == nil)
 			wg.Done()
 		}()
@@ -94,7 +88,7 @@ func TestSlave_Concurrent(t *testing.T) {
 	for _,req := range reqs{
 		req := req
 		go func() {
-			v,err := slave.Get(req.Key,req.ShardID)
+			v,err := slave.get(req.Key,req.ShardID)
 			assert.True(err != nil)
 			assert.Equal("",v)
 			wg.Done()
@@ -102,38 +96,38 @@ func TestSlave_Concurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	/* Transfer 20 shards */
-	storages := make(map[int] map[string]string)
-	for i:=0 ;i < shardNum;i ++{
-		storages[i] = make(map[string]string)
-	}
-	for _,req := range reqs{
-		storages[req.ShardID][req.Key] = req.Value
-	}
-	wg.Add(shardNum)
-	for shardID, storage := range storages{
-		shardID := shardID
-		storage := storage
-		go func() {
-			err := slave.TransferShard(shardID,storage)
-			assert.True(err == nil)
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-
-	/* should exist */
-	wg.Add(len(reqs))
-	for _,req := range reqs{
-		req := req
-		go func() {
-			v,err := slave.Get(req.Key,req.ShardID)
-			assert.True(err == nil)
-			assert.True(v == req.Value)
-			wg.Done()
-		}()
-	}
-	wg.Wait()
+	///* Transfer 20 shards */
+	//storages := make(map[int] map[string]string)
+	//for i:=0 ;i < shardNum;i ++{
+	//	storages[i] = make(map[string]string)
+	//}
+	//for _,req := range reqs{
+	//	storages[req.ShardID][req.Key] = req.Value
+	//}
+	//wg.Add(shardNum)
+	//for shardID, storage := range storages{
+	//	shardID := shardID
+	//	storage := storage
+	//	go func() {
+	//		err := slave.TransferShard(shardID,storage)
+	//		assert.True(err == nil)
+	//		wg.Done()
+	//	}()
+	//}
+	//wg.Wait()
+	//
+	///* should exist */
+	//wg.Add(len(reqs))
+	//for _,req := range reqs{
+	//	req := req
+	//	go func() {
+	//		v,err := slave.Get(req.Key,req.ShardID)
+	//		assert.True(err == nil)
+	//		assert.True(v == req.Value)
+	//		wg.Done()
+	//	}()
+	//}
+	//wg.Wait()
 }
 
 

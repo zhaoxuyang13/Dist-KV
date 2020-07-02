@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/samuel/go-zookeeper/zk"
@@ -101,7 +102,7 @@ func (s *Client) ensureRoot() error {
 // 接下来我们编写服务注册方法
 /* client register a service, protected temporal sequential add */
 func (s *Client) Register(node ServiceNode) (string,error) {
-	if err := s.ensureName(node.Name); err != nil {
+	if err := s.ensurePath(node.Name); err != nil {
 		return "",err
 	}
 	path := s.zkRoot + "/" + node.Name + "/n"
@@ -118,7 +119,7 @@ func (s *Client) Register(node ServiceNode) (string,error) {
 }
 
 func (s *Client) TryPrimary(node ServiceNode)error {
-	if err := s.ensureName(node.Name); err != nil {
+	if err := s.ensurePath(node.Name); err != nil {
 		return err
 	}
 	path := s.zkRoot + "/" + node.Name + "/n"
@@ -148,7 +149,22 @@ func (s *Client) ensureName(name string) error {
 	}
 	return nil
 }
-
+/* create path if not exist*/
+func (s *Client) ensurePath(path string) error {
+	names := strings.Split(path,"/")
+	prefix := ""
+	for index,name := range names {
+		if index == 0 {
+			prefix = name
+		}else {
+			prefix += "/" + name
+		}
+		if err := s.ensureName(prefix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 // 先要创建/api/user节点作为服务列表的父节点。然后创建一个保护顺序临时(ProtectedEphemeralSequential)子节点，同时将地址信息存储在节点中。什么叫保护顺序临时节点，首先它是一个临时节点，会话关闭后节点自动消失。其它它是个顺序节点，zookeeper自动在名称后面增加自增后缀，确保节点名称的唯一性。同时还是个保护性节点，节点前缀增加了GUID字段，确保断开重连后临时节点可以和客户端状态对接上。
 
 // 接下来我们实现消费者获取服务列表方法
@@ -186,11 +202,28 @@ func (s *Client) GetNodes(name string) ([]*ServiceNode, error) {
 	return nodes, nil
 }
 /*
+	get service node under "name", and assert only one result
+*/
+var ErrNotFound = errors.New("not found any node under the path")
+var ErrMultipleNodes = errors.New("found multiple nodes, supposed to be one")
+func (s *Client) Get1Node(name string) (*ServiceNode, error){
+	if nodes, err := s.GetNodes(name); err != nil {
+		return nil,err
+	}else if len(nodes) == 0 {
+		return nil, ErrNotFound
+	}else if len(nodes) > 1 {
+		return nil,ErrMultipleNodes
+	}else {
+		return nodes[0],nil
+	}
+
+}
+/*
 SubscribeNodes : return a channel that emit a []*ServiceNode whenever the children under "name"path change
 */
 func (s *Client) SubscribeNodes(name string,done chan struct{}) (chan []*ServiceNode, error){
 	path := s.zkRoot + "/" + name
-	err := s.ensureName(name)
+	err := s.ensurePath(name)
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -260,7 +293,7 @@ func (s *Client) Subscribe1Node(name string) (chan ServiceNode, error){
 			if len(nodes) == 0 {
 			close(resChan)
 			close(done)
-			}else if len(nodes) != 1{
+			}else if len(nodes) != 1 {
 				log.Printf("not suppose to see multiple primary nodes")
 			}else {
 				resChan <- *nodes[0]
@@ -309,23 +342,7 @@ func (s *Client)DeleteNode(path string) error {
 	}
 	return nil
 }
-/*
-	get service node under "name", and assert only one result
-*/
-var ErrNotFound = errors.New("not found any node under the path")
-var ErrMultipleNodes = errors.New("found multiple nodes, supposed to be one")
-func (s *Client) Get1Node(name string) (*ServiceNode, error){
-	if nodes, err := s.GetNodes(name); err != nil {
-		return nil,err
-	}else if len(nodes) == 0 {
-		return nil, ErrNotFound
-	}else if len(nodes) > 1 {
-		return nil,ErrMultipleNodes
-	}else {
-		return nodes[0],nil
-	}
 
-}
 /* ZkServer information  */
 type ZkServer struct {
 	Ip   string `json:"ip"`

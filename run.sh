@@ -15,3 +15,11 @@ go run go/slave_server.go  127.0.0.1 4030 slave3-1 3 > logs/slave-3-1.log &
 go run go/slave_server.go  127.0.0.1 4031 slave3-2 3 > logs/slave-3-2.log &
 
 go run go/slave_server.go  127.0.0.1 4040 slave4-1 4 > logs/slave-4-1.log &
+
+sleep 5
+
+go run go/admin.go join-groups 1 2 3 4 &
+
+sleep 5
+
+go run go/client.go

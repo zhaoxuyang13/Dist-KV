@@ -13,12 +13,12 @@ import (
 
 
 type RPCServer struct {
-	slave *Slave
+	server *Server
 
 }
-func NewRPCServer(slave *Slave) *RPCServer {
+func NewRPCServer(server *Server) *RPCServer {
 	return &RPCServer{
-		slave: slave,
+		server: server,
 	}
 }
 
@@ -26,8 +26,9 @@ func (s *RPCServer) Serve(){
 	/* start RPC Service on ip:Port */
 	grpcServer := grpc.NewServer()
 	RegisterKVServiceServer(grpcServer, s)
-	serverString := s.slave.ServerString()
-	//TODO extract net.Listen out.
+
+	serverString := s.server.ServerString()
+	//TODO: should I extract net.Listen out ?
 	listen, err := net.Listen("tcp", serverString) // hard configure TCP
 	if err != nil {
 		log.Fatal(err)
@@ -42,20 +43,20 @@ func (s *RPCServer) Serve(){
 Put : RPC call to Put a key value
 */
 func (s *RPCServer) Put(ctx context.Context, args *Request) (*Empty, error) {
-	if !s.slave.Primary {
+	if !s.server.primary {
 		return nil,ErrNotPrimary
 	}
 	shardID := int(args.ShardID)
-	return  &Empty{},s.slave.Put(args.Key,args.Value,shardID)
+	return  &Empty{},s.server.Put(args.Key,args.Value,shardID)
 }
 /*
 Get : RPC call to Get a key */
 func (s *RPCServer) Get(ctx context.Context, args *Request) (*Response, error) {
-	if !s.slave.Primary {
+	if !s.server.primary {
 		return nil,ErrNotPrimary
 	}
 	shardID := int(args.ShardID)
-	value, err := s.slave.Get(args.Key,shardID)
+	value, err := s.server.Get(args.Key,shardID)
 	return &Response{
 		Value: value,
 	},err
@@ -64,19 +65,19 @@ func (s *RPCServer) Get(ctx context.Context, args *Request) (*Response, error) {
 Del: RPC call to delete a key
 */
 func (s *RPCServer) Del(ctx context.Context, args *Request) (*Empty, error) {
-	if !s.slave.Primary {
+	if !s.server.primary {
 		return nil,ErrNotPrimary
 	}
 	shardID := int(args.ShardID)
 
-	return &Empty{}, s.slave.Del(args.Key, shardID)
+	return &Empty{}, s.server.Del(args.Key, shardID)
 }
 /*
 SyncRequest
 */
 func (s*RPCServer)Sync(ctx context.Context, req *SyncRequest)(*Empty, error) {
 	/* no need to acquire lock when sync because primary already has lock */
-	return &Empty{},s.slave.Sync(
+	return &Empty{},s.server.Sync(
 		request{
 			Key:     req.Key,
 			Value:   req.Value,
@@ -92,5 +93,5 @@ func (s *RPCServer) TransferShard(ctx context.Context, req *ShardRequest) (*Empt
 	shardID := int(req.ShardID)
 	storage := req.Storage
 
-	return &Empty{},s.slave.TransferShard(shardID,storage)
+	return &Empty{},s.server.TransferShard(shardID,storage)
 }

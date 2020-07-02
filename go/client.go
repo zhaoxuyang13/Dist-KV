@@ -7,13 +7,11 @@ import (
 	"ds/go/common/zk_client"
 	"ds/go/master"
 	"ds/go/slave"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -89,6 +87,8 @@ func (c *UserClient) Put(args []string) {
 			}else {
 				errStatus, _ := status.FromError(err)
 				try++
+				fmt.Printf("error detected: code %d, %+v\n", errStatus.Code(), errStatus)
+
 				switch errStatus.Code() {
 				case codes.Unavailable:
 					fallthrough
@@ -101,6 +101,7 @@ func (c *UserClient) Put(args []string) {
 			}
 		}
 	}
+	fmt.Println("slave server currently not available, retry later!")
 
 }
 /* simple put don't handle error */
@@ -140,18 +141,22 @@ func (c *UserClient) Get(args []string) {
 		}else {
 			errStatus, _ := status.FromError(err)
 			try ++
+			fmt.Printf("error detected: code %d, %+v\n", errStatus.Code(), errStatus)
+
 			switch errStatus.Code() {
 			case codes.NotFound:
 				fmt.Printf("\"%s\" not exist \n",key)
 				return
 			case codes.Unavailable: fallthrough
-			case codes.PermissionDenied: // TODO : not primary case
+			case codes.PermissionDenied:
 				c.updateConf()
 			default:
 				fmt.Println("unhandled err: " + err.Error())
 			}
 		}
 	}
+
+	fmt.Println("slave server currently not available, retry later!")
 }
 func (c *UserClient) SimpleGet(args []string) (string,error){
 	key := args[0]
@@ -187,18 +192,21 @@ func (c *UserClient) Del(args []string) {
 		}else {
 			errStatus, _ := status.FromError(err)
 			try ++
+			fmt.Printf("error detected: code %d, %+v\n", errStatus.Code(), errStatus)
+
 			switch errStatus.Code() {
 			case codes.NotFound:
 				fmt.Printf("\"%s\" not exist \n",key)
 				return
 			case codes.Unavailable: fallthrough
-			case codes.PermissionDenied: // TODO : not primary case
+			case codes.PermissionDenied:
 				c.updateConf()
 			default:
 				fmt.Println("unhandled err: " + err.Error())
 			}
 		}
 	}
+	fmt.Println("slave server currently not available, retry later!")
 }
 func (c *UserClient) SimpleDel(args []string) error {
 	key := args[0]
@@ -227,24 +235,6 @@ type UserClient struct {
 	conf      master.Configuration
 	primaries map[int]zk_client.ServiceNode
 	zkClient  *zk_client.Client
-}
-
-func (c *UserClient) initZkClient() error {
-	/* read configuration from json file, and start connection with zookeeper cluster */
-	content, err := ioutil.ReadFile("./configuration.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	var conf zk_client.Conf
-	err = json.Unmarshal(content, &conf)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	c.zkClient, err = zk_client.NewClient(conf.ServerStrings(), "/node", 10)
-	if err != nil {
-		panic(err)
-	}
-	return nil
 }
 
 var ErrInvalidVersion = errors.New("local version larger than remote version")
@@ -278,7 +268,7 @@ func (c *UserClient) updateConf() (bool, error) {
 		if err := c.getPrimaries(); err != nil {
 			return false, nil
 		}
-		fmt.Printf("updated conf %+v\n",c.conf)
+		fmt.Printf("current assignment %+v\n",c.conf.Assignment)
 		return true, nil
 	}
 }
@@ -306,10 +296,12 @@ func main() {
 		primaries: make(map[int]zk_client.ServiceNode),
 		zkClient: nil,
 	}
-	if err := client.initZkClient(); err != nil {
+
+	if zkClient,err := zk_client.CreateClientFromConfigurationFile("./configuration.json"); err != nil {
 		fmt.Println(err.Error())
 		return
 	}else {
+		client.zkClient = zkClient
 		defer client.zkClient.Close()
 	}
 	if updated, err := client.updateConf(); err != nil {

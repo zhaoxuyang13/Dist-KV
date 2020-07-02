@@ -16,7 +16,7 @@
 - [x] Master/Slave/Client - On configuration change, how to shift shards.
 - [ ] Copy test from 6.824 / or write on my own
 - [ ] Master/Slave/Client - handling network error, filter out duplicate RPCs
-- [ ] Lock library (for slaves data access,necessary?)
+- [x] Lock library (for slaves data access, not necessary)
 - [x] Slave backup & primary failed re-election logic
 - [x] Slave backup & primary normal logic
 - [x] Starting script for slave-master cluster 
@@ -34,7 +34,7 @@
 $ docker-compose -f zk-cluster up
 ```
 
-- [ ] deploy zkper using own script
+- [x] deploy zkper using own script
 
 **Slave**
 
@@ -69,4 +69,4 @@ $ go run go/admin.go [command] [groupIDs ...]
 ---
 - Strange cases 
 
-    - when primary failed and become backup again. client's request should fail.
+    - when primary failed and become backup again. client's request should fail. (fixed)

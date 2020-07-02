@@ -17,7 +17,7 @@ type ShardMaster struct {
 	hostname string
 
 	shardConfLock sync.RWMutex // big lock for configuration modification.
-	ShardConfs    []*Configuration
+	shardConfs    []*Configuration
 }
 type ServerConf struct {
 	IP       string
@@ -33,7 +33,7 @@ func NewShardMaster(conf ServerConf) *ShardMaster {
 		hostname:      conf.Hostname,
 		latest:        0,
 		shardConfLock: sync.RWMutex{},
-		ShardConfs:    make([]*Configuration, 1),
+		shardConfs:    make([]*Configuration, 1),
 	}
 
 	firstConf := Configuration{
@@ -46,11 +46,11 @@ func NewShardMaster(conf ServerConf) *ShardMaster {
 	for i := 0; i < conf.ShardNum; i++ {
 		firstConf.Assignment[i] = 0
 	}
-	sm.ShardConfs[0] = &firstConf
+	sm.shardConfs[0] = &firstConf
 	return &sm
 }
 func (m *ShardMaster)ServerString() string{
-	return m.ip + ":" + strconv.Itoa(m.port);
+	return m.ip + ":" + strconv.Itoa(m.port)
 }
 /* split work load for groups in circumstance of
 M shards, N groups
@@ -77,7 +77,6 @@ func (m *ShardMaster) splitWork(N int) []int {
 	}
 }
 
-
 /*
 Join : join several new groups to shardMaster, and re-balance
 */
@@ -87,7 +86,7 @@ func (m *ShardMaster) Join(newGroups map[int][]string) error {
 	m.shardConfLock.Lock()
 	defer m.shardConfLock.Unlock()
 
-	lastConf := m.ShardConfs[m.latest] // maybe merge latest conf with new conf
+	lastConf := m.shardConfs[m.latest] // maybe merge latest conf with new conf
 	newConf,_ := lastConf.DeepCopy()
 	if newConf.Version != m.latest {
 		panic("no way")
@@ -131,7 +130,7 @@ func (m *ShardMaster) Join(newGroups map[int][]string) error {
 		index++
 		/* add new group to Id2Groups if gid not collide.*/
 		if _, exist := newConf.Id2Groups[group.Gid]; exist {
-			return errors.New("gid already exist:" + strconv.Itoa(int(gid)) + " \n")
+			return errors.New("gid already exist:" + strconv.Itoa(gid) + " \n")
 		}
 		newConf.Id2Groups[group.Gid] = *group
 		for _, shard := range group.Shards { // assign those shards to new group.
@@ -141,7 +140,7 @@ func (m *ShardMaster) Join(newGroups map[int][]string) error {
 	/* update the change back to ShardMaster*/
 	m.latest ++
 	newConf.Version = m.latest
-	m.ShardConfs = append(m.ShardConfs, newConf)
+	m.shardConfs = append(m.shardConfs, newConf)
 
 	return nil
 }
@@ -155,7 +154,7 @@ func (m *ShardMaster) Leave(groupIDs []int) error {
 	m.shardConfLock.Lock()
 	defer m.shardConfLock.Unlock()
 
-	lastConf := m.ShardConfs[m.latest] // maybe merge latest conf with new conf
+	lastConf := m.shardConfs[m.latest] // maybe merge latest conf with new conf
 	newConf,_ := lastConf.DeepCopy()
 	if newConf.Version != m.latest {
 		panic("no way")
@@ -177,7 +176,7 @@ func (m *ShardMaster) Leave(groupIDs []int) error {
 			shardsTaken = append(shardsTaken,group.Shards...)
 			delete(newConf.Id2Groups, gid)
 		} else {
-			return errors.New("the gid " + strconv.Itoa(int(gid)) + " in leave list does not exist")
+			return errors.New("the gid " + strconv.Itoa(gid) + " in leave list does not exist")
 		}
 	}
 	begin := 0
@@ -202,7 +201,7 @@ func (m *ShardMaster) Leave(groupIDs []int) error {
 	/* update the change back to ShardMaster*/
 	m.latest++
 	newConf.Version = m.latest
-	m.ShardConfs = append(m.ShardConfs, newConf)
+	m.shardConfs = append(m.shardConfs, newConf)
 
 	/*unlock(done by defer)*/
 
@@ -218,9 +217,9 @@ func (m *ShardMaster) Query(version int) (*Configuration, error) {
 	defer m.shardConfLock.RUnlock()
 
 	if version == -1 { /*asking for latest configuration*/
-		return m.ShardConfs[m.latest],nil
+		return m.shardConfs[m.latest],nil
 	} else if version >= 0 && version <= m.latest {
-		return m.ShardConfs[version],nil
+		return m.shardConfs[version],nil
 	} else {
 		return nil, errors.New("conf version not valid")
 	}

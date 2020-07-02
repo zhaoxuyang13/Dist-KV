@@ -6,7 +6,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
-	"strconv"
 	"sync"
 )
 
@@ -25,6 +24,7 @@ const (
 	UNREADY StorageState = iota
 	READY
 	EXPIRED
+	REMOVABLE
 )
 
 /*
@@ -50,75 +50,44 @@ func (s *LocalStorage)copyStorageAtomic() map[string]string{
 	return s.copyStorage()
 }
 
-type ServerConf struct {
-	Hostname string
-	IP       string
-	Port     int
-	GroupID  int
-}
-
-func (conf *ServerConf) ServerString() string {
-	return conf.IP+ ":" + strconv.Itoa(conf.Port)
-}
-
 /*
 Slave : slave structure implement slave RPC semantics
 */
-/* maybe convert to sync.Map */
 type Slave struct {
-	conf ServerConf
-	/* Am I primary node ?*/
-	Primary        bool
-	backupConfLock *sync.RWMutex
-	/* link to all back up servers of this cluster */
-	backupServers []*RPCClient
-
 	/*
-		ShardsLock : lock for groupInfo.shards(what shards current group serves),
+		shardsLock : lock for groupInfo.shards(what shards current group serves),
 		acquire when modifying or reading*/
-	ShardsLock *sync.RWMutex
-	shards 		[]int
+	shardsLock *sync.RWMutex
+	shards     []int
+
 	/*
 		storageLock: lock for shardID -> *localstorage map
-		lock for individual Local Shard Storage is in LocalStorage Structure.
-	*/
+		lock for individual Local Shard Storage is in LocalStorage Structure.*/
 	storageLock   *sync.RWMutex
 	localStorages map[int]*LocalStorage // map from ShardID to localStorages
-	/*
-		syncReqs: channel for requests from primary for processing
-	*/
-	syncReqs chan request
+
 }
 
-const SyncReqChanLength = 100
-func NewSlave(conf ServerConf) *Slave {
+func NewSlave() *Slave {
 	return &Slave{
-		Primary:        false,
-		conf :          conf,
-		backupConfLock: new(sync.RWMutex),
-		backupServers:  make([]*RPCClient,0),
-		ShardsLock:     new(sync.RWMutex),
-		shards:         make([]int,0),
-		storageLock:    new(sync.RWMutex),
-		localStorages:  make(map[int]*LocalStorage),
+		shardsLock:    new(sync.RWMutex),
+		shards:        make([]int,0),
+		storageLock:   new(sync.RWMutex),
+		localStorages: make(map[int]*LocalStorage),
 	}
 }
-func (s *Slave)ServerString() string {
-	return s.conf.ServerString()
-}
-func (s *Slave) Put(key string , value string , shardID int ) error {
-	log.Printf("Put %s-%s in shard %d\n", key, value, shardID)
-	s.ShardsLock.RLock()
+func (s *Slave) put(key string , value string , shardID int ) error {
+	s.shardsLock.RLock()
+	defer s.shardsLock.RUnlock()
 	if Utils.ContainsInt(s.shards, shardID) == false {
-		s.ShardsLock.RUnlock()
+		s.shardsLock.RUnlock()
 		return ErrWrongGroup
 	}
-	s.ShardsLock.RUnlock()
 
 	localStorage := s.assureStorage(shardID, READY)
-
 	localStorage.lock.Lock()
 	defer localStorage.lock.Unlock()
+
 	switch localStorage.state {
 	case EXPIRED:
 		log.Fatal("impossible to be expired and reach here")
@@ -129,29 +98,16 @@ func (s *Slave) Put(key string , value string , shardID int ) error {
 	default:
 	}
 	localStorage.storage[key] = value
-
-	if s.Primary {
-		if err := s.forwardRequest(request{
-			Key:     key,
-			Value:   value,
-			ShardID: shardID,
-			ReqCode: PutReq,
-		}); err != nil {
-			log.Printf("forwarding error\n")
-			return ErrNotPrimary //TODO: this is wrong error code
-		}
-	}
 	return nil
 }
 
-func (s *Slave) Get(key string , shardID int)  (string,error) {
-	log.Printf("Get %s in shard %d\n", key, shardID)
-	s.ShardsLock.RLock()
+func (s *Slave) get(key string , shardID int)  (string,error) {
+	s.shardsLock.RLock()
+	defer s.shardsLock.RUnlock()
 	if Utils.ContainsInt(s.shards, shardID) == false {
-		s.ShardsLock.RUnlock()
+		s.shardsLock.RUnlock()
 		return "",ErrWrongGroup
 	}
-	s.ShardsLock.RUnlock()
 
 	/* acquire r lock when read storage map*/
 	s.storageLock.RLock()
@@ -170,15 +126,14 @@ func (s *Slave) Get(key string , shardID int)  (string,error) {
 	}
 }
 
-func (s *Slave) Del(key string, shardID int) error {
+func (s *Slave) del(key string, shardID int) error {
 
-	log.Printf("Del %s in shard %d\n", key, shardID)
-	s.ShardsLock.RLock()
+	s.shardsLock.RLock()
+	defer s.shardsLock.RUnlock()
 	if Utils.ContainsInt(s.shards, shardID) == false {
-		s.ShardsLock.RUnlock()
+		s.shardsLock.RUnlock()
 		return ErrWrongGroup
 	}
-	s.ShardsLock.RUnlock()
 
 	/* acquire r lock when read storage map*/
 	s.storageLock.RLock()
@@ -196,76 +151,7 @@ func (s *Slave) Del(key string, shardID int) error {
 			delete(localStorage.storage, key)
 		}
 	}
-	if s.Primary{
-		if err := s.forwardRequest(request{
-			Key:     key,
-			ShardID: shardID,
-			ReqCode: DelReq,
-		}); err != nil {
-			log.Printf("forwarding error\n")
-			return ErrNotPrimary //TODO: this is wrong error code
-		}
-	}
-
 	return nil
-	/*release lock for the key, done by defer*/
-}
-const (
-	PutReq = iota
-	DelReq
-)
-
-type request struct {
-	Key  string
-	Value string
-	ShardID int
-	ReqCode int
-}
-/*
-SyncRequest
-*/
-func (s* Slave)Sync(req request) error {
-	/* no need to acquire lock when sync because primary already has lock */
-	s.syncReqs <- req
-	return nil
-}
-func (s *Slave)forwardRequest(req request) error {
-	s.backupConfLock.RLock()
-	defer s.backupConfLock.RUnlock()
-
-	wg := sync.WaitGroup{}
-	wg.Add(len(s.backupServers))
-	for _,backup := range s.backupServers {
-		backup := backup
-		go func() {
-			log.Printf("forward request to %v\n",backup.hostname)
-			if err := backup.Sync(req); err != nil {
-				log.Printf(err.Error())
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-	return nil
-}
-/**/
-func (s *Slave)ProcessSyncRequests(){
-	for req := range s.syncReqs {
-		shardID := req.ShardID
-		log.Printf("receive request:  %+v\n",req)
-		switch req.ReqCode { // todo: fault handling, backup conf may be lagged behind
-		case PutReq:
-			if err := s.Put(req.Key,req.Value,shardID); err != nil {
-				log.Printf(err.Error())
-				panic(err)
-			}
-		case DelReq:
-			if err :=s.Del(req.Key,shardID); err != nil {
-				log.Printf(err.Error())
-				panic(err)
-			}
-		}
-	}
 }
 /*
 assureStorage: atomic
@@ -285,21 +171,12 @@ func (s *Slave) assureStorage(shard int, state StorageState) *LocalStorage {
 	return s.localStorages[shard]
 }
 
-/*
-acquireStorage: atomic
-*/
-func (s *Slave) acquireStorage(shard int) *LocalStorage {
-	s.storageLock.RLock()
-	defer s.storageLock.RUnlock()
-	return s.localStorages[shard]
-}
 
 /*
-RPC call to Transfer a Shard to here
+add a new shard
 */
-func (s *Slave) TransferShard(shardID int,storage map[string]string) error {
+func (s *Slave) addStorage(shardID int,storage map[string]string) error {
 
-	log.Printf("receive shard %d\n", shardID)
 	localStorage := s.assureStorage(shardID, UNREADY)
 	localStorage.lock.Lock()
 	defer localStorage.lock.Unlock()
@@ -310,26 +187,37 @@ func (s *Slave) TransferShard(shardID int,storage map[string]string) error {
 	localStorage.state = READY
 	localStorage.cond.Broadcast()
 
-	if s.Primary{
-		s.backupConfLock.RLock()
-		defer s.backupConfLock.RUnlock()
-		wg := sync.WaitGroup{}
-		wg.Add(len(s.backupServers))
-		for _,backup := range s.backupServers {
-			// localize backup, or the backup variable will always be the last one in the iteration
-			backup := backup
-			go func() {
-				log.Printf("forward shard %d to %v\n",shardID,backup.hostname)
-				if  err := backup.TransferShard(shardID,storage); err != nil {
-					log.Printf(err.Error())
-				}
-				wg.Done()
-			}()
-		}
-		wg.Wait()
-	}
-	log.Printf("	shard loaded %+v\n", s.localStorages[shardID])
+	log.Printf("	shard loaded %d\n",shardID )
 	return nil
+}
+
+func (s *Slave) expireStorage(shardID int) {
+	localStorage := s.assureStorage(shardID, EXPIRED)
+	localStorage.lock.Lock()
+	defer localStorage.lock.Unlock()
+	localStorage.state = EXPIRED
+}
+func (s *Slave) deleteStorage(shardID int){
+	s.storageLock.Lock()
+	defer s.storageLock.Unlock()
+	delete(s.localStorages, shardID)
+}
+
+func (s *Slave) deleteShard(shardID int){
+	s.shardsLock.Lock()
+	defer s.shardsLock.Unlock()
+	s.shards = Utils.Delete(s.shards, shardID)
+}
+func (s *Slave) addShard(shardID int){
+	s.shardsLock.Lock()
+	defer s.shardsLock.Unlock()
+	s.shards = append(s.shards, shardID)
+}
+/* safely with a read lock */
+func (s *Slave)compareShards(newShards []int) ([]int, []int) {
+	s.shardsLock.RLock()
+	defer s.shardsLock.RUnlock()
+	return diffShards(s.shards,newShards)
 }
 
 /*
