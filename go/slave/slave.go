@@ -80,7 +80,6 @@ func (s *Slave) put(key string , value string , shardID int ) error {
 	s.shardsLock.RLock()
 	defer s.shardsLock.RUnlock()
 	if Utils.ContainsInt(s.shards, shardID) == false {
-		s.shardsLock.RUnlock()
 		return ErrWrongGroup
 	}
 
@@ -105,7 +104,6 @@ func (s *Slave) get(key string , shardID int)  (string,error) {
 	s.shardsLock.RLock()
 	defer s.shardsLock.RUnlock()
 	if Utils.ContainsInt(s.shards, shardID) == false {
-		s.shardsLock.RUnlock()
 		return "",ErrWrongGroup
 	}
 
@@ -131,7 +129,6 @@ func (s *Slave) del(key string, shardID int) error {
 	s.shardsLock.RLock()
 	defer s.shardsLock.RUnlock()
 	if Utils.ContainsInt(s.shards, shardID) == false {
-		s.shardsLock.RUnlock()
 		return ErrWrongGroup
 	}
 

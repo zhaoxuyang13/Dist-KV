@@ -79,14 +79,20 @@ func NewServer(conf ServerConf, client *zk_client.Client) *Server {
 Serve : start KV service
 */
 func (s *Server) Serve() {
+
+	done := make(chan interface{})
+	go func() {
+		s.rpcServer.Serve()
+		close(done)
+	}()
 	/* primary election, then register and work as the role*/
 	s.electThenWork()
 
-	/* start timer, slave server will retrieve configuration from master every time period*/
+	/* start timer, slave server will retrieve configuration from master every time period */
 	confChan := s.getConfEveryPeriod(100)
 	go s.processConfs(confChan)
-	s.rpcServer.Serve()
 
+	<- done
 }
 
 func (s *Server) Put(key string, value string, shardID int) error {
